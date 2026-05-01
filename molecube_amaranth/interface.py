@@ -1,9 +1,6 @@
 #
 
 from amaranth import *
-from amaranth.lib import wiring
-from amaranth.lib.wiring import In, Out
-from amaranth_axi.axibus import AXI4
 from amaranth_axi.axitools import axi_write_reg, AXISlaveReadIFace, AXISlaveWriteIFace
 
 from transactron import TModule, Transaction
@@ -16,20 +13,18 @@ from .config import MAJOR_VERSION, MINOR_VERSION
 from .csr import Registers
 from .utils import xvalue
 
-class ControlInterface(wiring.Component):
+class ControlInterface(Elaboratable):
     DATA_WIDTH = 32
-    def __init__(self, addr_width, id_width, csr_regs, fifos, prefix=0, valid_width=None):
-        self.addr_width = addr_width
-        self.id_width = id_width
+    def __init__(self, axi, csr_regs, fifos, prefix=0, valid_width=None):
+        self.axi = axi
+        self.addr_width = len(axi.AWADDR)
+        self.id_width = len(axi.AWID)
         self.csr_regs = csr_regs
         self.fifos = fifos
         if valid_width is None:
-            valid_width = addr_width
+            valid_width = self.addr_width
         self.prefix = prefix >> valid_width
         self.valid_width = valid_width
-        super().__init__({
-            'axi': In(AXI4(self.DATA_WIDTH, addr_width, id_width)),
-        })
 
     def elaborate(self, plat):
         m = TModule()
@@ -298,12 +293,14 @@ class ControlInterface(wiring.Component):
 
 if __name__ == '__main__':
     from amaranth.back import verilog
+    from amaranth_axi.axibus import AXI4
     from transactron import TransactronContextElaboratable
     from .csr import Registers
     from .fifo import Fifos
     m = TModule()
     m.submodules.regs = regs = Registers()
     m.submodules.fifos = fifos = Fifos(32)
-    m.submodules.ctrl = ctrl = ControlInterface(10, 6, regs, fifos)
+    m.submodules.ctrl = ctrl = ControlInterface(AXI4(32, 10, 6, len_width=4).create(),
+                                                regs, fifos)
     m = TransactronContextElaboratable(m)
     print(verilog.convert(m, ports=ctrl.axi.all_ports))

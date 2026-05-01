@@ -7,6 +7,7 @@ from transactron import TModule, Method, def_method
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO
 from transactron.lib.adapters import AdapterTrans
 
+from amaranth_axi.axibus import AXI4
 from amaranth_axi.axitools import AXIMasterWriteIFace, AXIMasterReadIFace
 
 from molecube_amaranth.csr import Registers
@@ -29,7 +30,8 @@ class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9):
         self.csr = Registers()
         self.fifos = Fifos(32)
-        self.iface = ControlInterface(addr_width, 6, self.csr, self.fifos,
+        axi = AXI4(32, addr_width, 6, len_width=4).create()
+        self.iface = ControlInterface(axi, self.csr, self.fifos,
                                       prefix=addr_prefix, valid_width=9)
 
         self.reader = AXIMasterReadIFace(self.iface.axi)
