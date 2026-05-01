@@ -442,7 +442,13 @@ class TestInterface(TestCaseWithSimulator):
                     await sim.tick()
                 assert (await iface.write_reply.call_try(sim)).resp == 0
 
-            for _ in range(100):
+            results = []
+            for _ in range(10):
+                data = random.randint(0, 0xffff_ffff)
+                assert (await iface.write_result.call_try(sim, data=data)) is not None
+                results.append(data)
+
+            for _ in range(150):
                 while True:
                     addr = random.randint(0, 0xffff_ffff)
                     if (addr >> 9) != (prefix >> 9):
@@ -457,6 +463,12 @@ class TestInterface(TestCaseWithSimulator):
                 for _ in range(3):
                     await sim.tick()
                 assert (await iface.write_reply.call_try(sim)).resp == 3
+
+            while results:
+                assert (await iface.read_request.call_try(sim, addr=0x1f * 4 | prefix)) is not None
+                for _ in range(25):
+                    await sim.tick()
+                assert (await iface.read_reply.call_try(sim)).data == results.pop(0)
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)

@@ -179,9 +179,9 @@ class ControlInterface(Elaboratable):
                         resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
 
         @read_pipe.stage(m, o=[('data', self.DATA_WIDTH)])
-        def _(idx):
+        def _(idx, resp):
             res = Signal(self.DATA_WIDTH)
-            with m.If(idx == 0x1f):
+            with m.If((idx == 0x1f) & ~resp[0]):
                 csr.dbg_result_consumed.count(m)
                 m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
             with m.Else():
