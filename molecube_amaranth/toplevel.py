@@ -5,7 +5,6 @@ from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.lib.cdc import ResetSynchronizer
 from amaranth_zynq.ps7 import PsZynq
-from amaranth_axi import AXI32AXI, AXI2AXILite
 
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.fifo import Fifos
@@ -23,7 +22,7 @@ class TopLevel(Elaboratable):
         m.submodules.ps = ps = PsZynq()
         m.submodules.regs = regs = Registers()
         m.submodules.fifos = fifos = Fifos(32)
-        m.submodules.controller = controller = ControlInterface(32, regs, fifos,
+        m.submodules.controller = controller = ControlInterface(32, 12, regs, fifos,
                                                                 prefix=0x7300_0000,
                                                                 valid_width=9)
 
@@ -40,10 +39,6 @@ class TopLevel(Elaboratable):
         axi_master = ps.MAXIGP0
         m.d.comb += ps.MAXIGP0ACLK.eq(clk)
 
-        m.submodules.axi2axil = axi2axil = AXI2AXILite(data_width=32,
-                                                       addr_width=32,
-                                                       id_width=12)
-        wiring.connect(m, axi_master, axi2axil.axi)
-        wiring.connect(m, axi2axil.axilite, controller.axilite)
+        wiring.connect(m, axi_master, controller.axi)
 
         return m

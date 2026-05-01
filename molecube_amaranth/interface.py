@@ -3,8 +3,8 @@
 from amaranth import *
 from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
-from amaranth_axi.axibus import AXI4Lite
-from amaranth_axi.axitools import axi_write_reg, AXILSlaveReadIFace, AXILSlaveWriteIFace
+from amaranth_axi.axibus import AXI4
+from amaranth_axi.axitools import axi_write_reg, AXISlaveReadIFace, AXISlaveWriteIFace
 
 from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
@@ -18,8 +18,9 @@ from .utils import xvalue
 
 class ControlInterface(wiring.Component):
     DATA_WIDTH = 32
-    def __init__(self, addr_width, csr_regs, fifos, prefix=0, valid_width=None):
+    def __init__(self, addr_width, id_width, csr_regs, fifos, prefix=0, valid_width=None):
         self.addr_width = addr_width
+        self.id_width = id_width
         self.csr_regs = csr_regs
         self.fifos = fifos
         if valid_width is None:
@@ -27,16 +28,16 @@ class ControlInterface(wiring.Component):
         self.prefix = prefix >> valid_width
         self.valid_width = valid_width
         super().__init__({
-            'axilite': In(AXI4Lite(self.DATA_WIDTH, addr_width)),
+            'axi': In(AXI4(self.DATA_WIDTH, addr_width, id_width)),
         })
 
     def elaborate(self, plat):
         m = TModule()
 
-        m.submodules.write_iface = write_iface = AXILSlaveWriteIFace(self.axilite,
-                                                                     buffered=False)
-        m.submodules.read_iface = read_iface = AXILSlaveReadIFace(self.axilite,
-                                                                  buffered=True)
+        m.submodules.write_iface = write_iface = AXISlaveWriteIFace(self.axi,
+                                                                    buffered=True)
+        m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
+                                                                 buffered=True)
 
         csr_shadow0 = SimpleNamespace()
         csr_shadow = SimpleNamespace()
@@ -89,14 +90,19 @@ class ControlInterface(wiring.Component):
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
 
-        start_write = write_pipe.create_external(i=[('idx', self.addr_width - 2),
-                                                    ('data', 32), ('strb', 4)], o=[])
+        start_write_iface = [('idx', self.addr_width - 2),
+                             ('data', 32), ('strb', 4)]
+        if self.valid_width != self.addr_width:
+            start_write_iface.extend([('id', self.id_width), ('last', 1)])
+        start_write = write_pipe.create_external(i=start_write_iface, o=[])
 
         if self.valid_width != self.addr_width:
             @write_pipe.stage(m, o=[('idx', self.valid_width - 2)])
-            def _(idx):
+            def _(idx, id, last):
                 idx_prefix = idx >> (self.valid_width - 2)
-                write_iface.done(m, Mux(idx_prefix == self.prefix, 0, 3))
+                with m.If(last):
+                    write_iface.done(m, resp=Mux(idx_prefix == self.prefix, 0, 3),
+                                     id=id)
                 return dict(idx=idx[:self.valid_width - 2])
 
         @write_pipe.stage(m)
@@ -158,13 +164,19 @@ class ControlInterface(wiring.Component):
         with Transaction().body(m):
             req = write_iface.get(m)
             addr = req.addr
-            start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
             if self.valid_width == self.addr_width:
-                write_iface.done(m)
+                start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
+                with m.If(req.last):
+                    write_iface.done(m, id=req.id)
+            else:
+                start_write(m, idx=addr >> 2, data=req.data, strb=req.strb,
+                            id=req.id, last=req.last)
 
         m.submodules.read_pipe = read_pipe = PipelineBuilder()
 
-        start_read = read_pipe.create_external(i=[('idx', self.addr_width - 2)], o=[])
+        start_read = read_pipe.create_external(i=[('idx', self.addr_width - 2),
+                                                  ('id', self.id_width),
+                                                  ('last', 1)], o=[])
 
         @read_pipe.stage(m, o=[('idx', self.valid_width - 2), ('resp', 2)])
         def _(idx):
@@ -275,13 +287,12 @@ class ControlInterface(wiring.Component):
             pass
 
         @read_pipe.stage(m)
-        def _(data, resp):
-            read_iface.done(m, data, resp=resp)
+        def _(data, resp, id, last):
+            read_iface.done(m, data=data, resp=resp, id=id, last=last)
 
         with Transaction().body(m):
             req = read_iface.get(m)
-            idx = req.addr >> 2
-            start_read(m, idx)
+            start_read(m, idx=req.addr >> 2, id=req.id, last=req.last)
 
         return m
 
@@ -293,6 +304,6 @@ if __name__ == '__main__':
     m = TModule()
     m.submodules.regs = regs = Registers()
     m.submodules.fifos = fifos = Fifos(32)
-    m.submodules.ctrl = ctrl = ControlInterface(10, regs, fifos)
+    m.submodules.ctrl = ctrl = ControlInterface(10, 6, regs, fifos)
     m = TransactronContextElaboratable(m)
-    print(verilog.convert(m, ports=ctrl.axilite.all_ports))
+    print(verilog.convert(m, ports=ctrl.axi.all_ports))

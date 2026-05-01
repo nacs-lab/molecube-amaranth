@@ -3,11 +3,11 @@
 from amaranth import *
 from amaranth.lib import io
 
-from transactron import TModule
+from transactron import TModule, Method, def_method
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO
 from transactron.lib.adapters import AdapterTrans
 
-from amaranth_axi.axitools import AXILMasterWriteIFace, AXILMasterReadIFace
+from amaranth_axi.axitools import AXIMasterWriteIFace, AXIMasterReadIFace
 
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION
@@ -29,16 +29,22 @@ class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9):
         self.csr = Registers()
         self.fifos = Fifos(32)
-        self.iface = ControlInterface(addr_width, self.csr, self.fifos,
+        self.iface = ControlInterface(addr_width, 6, self.csr, self.fifos,
                                       prefix=addr_prefix, valid_width=9)
 
-        self.reader = AXILMasterReadIFace(self.iface.axilite)
-        self.writer = AXILMasterWriteIFace(self.iface.axilite)
+        self.reader = AXIMasterReadIFace(self.iface.axi)
+        self.writer = AXIMasterWriteIFace(self.iface.axi)
 
-        self.read_request = _TestbenchIO(AdapterTrans.create(self.reader.request))
-        self.read_reply = _TestbenchIO(AdapterTrans.create(self.reader.reply))
-        self.write_request = _TestbenchIO(AdapterTrans.create(self.writer._request))
-        self.write_reply = _TestbenchIO(AdapterTrans.create(self.writer.reply))
+        self._read_request = Method(i=[('addr', addr_width)])
+        self._read_reply = Method(o=[('data', 32), ('resp', 2)])
+
+        self._write_request = Method(i=[('addr', addr_width), ('data', 32), ('strb', 4)])
+        self._write_reply = Method(o=[('resp', 2)])
+
+        self.read_request = _TestbenchIO(AdapterTrans.create(self._read_request))
+        self.read_reply = _TestbenchIO(AdapterTrans.create(self._read_reply))
+        self.write_request = _TestbenchIO(AdapterTrans.create(self._write_request))
+        self.write_reply = _TestbenchIO(AdapterTrans.create(self._write_reply))
 
         self.read_inst = _TestbenchIO(AdapterTrans.create(self.fifos.cmd_fifo.read))
         self.write_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.write))
@@ -128,6 +134,28 @@ class InterfaceWrapper(Elaboratable):
 
         m.submodules.reader = self.reader
         m.submodules.writer = self.writer
+
+        @def_method(m, self._read_request)
+        def _(addr):
+            self.reader.request(m, id=0, size=2, len=0, burst=0, addr=addr)
+
+        @def_method(m, self._read_reply)
+        def _():
+            reply = self.reader.reply(m)
+            m.d.sync += [Assert(reply.id == 0),
+                         Assert(reply.last == 1)]
+            return dict(data=reply.data, resp=reply.resp)
+
+        @def_method(m, self._write_request)
+        def _(addr, data, strb):
+            self.writer.addr_request(m, addr=addr, id=0, size=2, len=0, burst=0)
+            self.writer.data_request(m, data=data, strb=strb, last=1)
+
+        @def_method(m, self._write_reply)
+        def _():
+            reply = self.writer.reply(m)
+            m.d.sync += [Assert(reply.id == 0)]
+            return dict(resp=reply.resp)
 
         m.submodules.read_request = self.read_request
         m.submodules.read_reply = self.read_reply
