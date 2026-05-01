@@ -428,7 +428,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(10):
                 while True:
                     addr = random.randint(0, valid_mask)
-                    if addr != 0x1f:
+                    if addr >> 2 != 0x1f:
                         break
                 addr |= prefix
                 assert (await iface.read_request.call_try(sim, addr=addr)) is not None
@@ -442,11 +442,22 @@ class TestInterface(TestCaseWithSimulator):
                     await sim.tick()
                 assert (await iface.write_reply.call_try(sim)).resp == 0
 
+            rw_idxs = list(iface.read_write_regs)
+            for _ in range(20):
+                addr = (random.choice(rw_idxs) << 2) | prefix
+                assert (await iface.write_request.call_try(sim, addr=addr, strb=0xf,
+                                                           data=random.randint(0, 0xffff_ffff))) is not None
+                for _ in range(3):
+                    await sim.tick()
+                assert (await iface.write_reply.call_try(sim)).resp == 0
+
             results = []
             for _ in range(10):
                 data = random.randint(0, 0xffff_ffff)
                 assert (await iface.write_result.call_try(sim, data=data)) is not None
                 results.append(data)
+            reg_values = {idx: sim.get(reg) for idx, reg in iface.read_write_regs.items()}
+            assert (await iface.read_inst.call_try(sim)) is None
 
             for _ in range(150):
                 while True:
@@ -469,6 +480,10 @@ class TestInterface(TestCaseWithSimulator):
                 for _ in range(25):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == results.pop(0)
+
+            reg_values2 = {idx: sim.get(reg) for idx, reg in iface.read_write_regs.items()}
+            assert reg_values2 == reg_values
+            assert (await iface.read_inst.call_try(sim)) is None
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)

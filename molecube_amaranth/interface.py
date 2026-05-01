@@ -84,21 +84,8 @@ class ControlInterface(Elaboratable):
             self.fifos.cmd_fifo.write(m, cmd_pre_fifo.read(m))
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
-
-        start_write_iface = [('idx', self.addr_width - 2),
-                             ('data', 32), ('strb', 4)]
-        if self.valid_width != self.addr_width:
-            start_write_iface.extend([('id', self.id_width), ('last', 1)])
-        start_write = write_pipe.create_external(i=start_write_iface, o=[])
-
-        if self.valid_width != self.addr_width:
-            @write_pipe.stage(m, o=[('idx', self.valid_width - 2)])
-            def _(idx, id, last):
-                idx_prefix = idx >> (self.valid_width - 2)
-                with m.If(last):
-                    write_iface.done(m, resp=Mux(idx_prefix == self.prefix, 0, 3),
-                                     id=id)
-                return dict(idx=idx[:self.valid_width - 2])
+        start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
+                                                    ('data', 32), ('strb', 4)], o=[])
 
         @write_pipe.stage(m)
         def _(idx, data):
@@ -156,6 +143,22 @@ class ControlInterface(Elaboratable):
                                          Signal(32 - len(csr_shadow.dds_timing2))),
                                   data, strb)
 
+        if self.valid_width != self.addr_width:
+            m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
+            start_prewrite = prewrite_pipe.create_external(
+                i=[('idx', self.addr_width - 2), ('data', 32),
+                   ('strb', 4), ('id', self.id_width), ('last', 1)], o=[])
+
+            @prewrite_pipe.stage(m)
+            def _(idx, data, strb, id, last):
+                idx_prefix = idx >> (self.valid_width - 2)
+                valid = Signal()
+                m.d.top_comb += valid.eq(idx_prefix == self.prefix)
+                with m.If(last):
+                    write_iface.done(m, resp=Mux(valid, 0, 3), id=id)
+                with m.If(valid):
+                    start_write(m, idx=idx[:self.valid_width - 2], data=data, strb=strb)
+
         with Transaction().body(m):
             req = write_iface.get(m)
             addr = req.addr
@@ -164,8 +167,8 @@ class ControlInterface(Elaboratable):
                 with m.If(req.last):
                     write_iface.done(m, id=req.id)
             else:
-                start_write(m, idx=addr >> 2, data=req.data, strb=req.strb,
-                            id=req.id, last=req.last)
+                start_prewrite(m, idx=addr >> 2, data=req.data, strb=req.strb,
+                              id=req.id, last=req.last)
 
         m.submodules.read_pipe = read_pipe = PipelineBuilder()
 
