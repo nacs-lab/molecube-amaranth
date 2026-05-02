@@ -18,7 +18,7 @@ from .utils import DDSChecker, SPIChecker, InstBuilder
 import pytest
 import random
 
-def config(spi=False):
+def config(*, spi=False, clock_shift=1):
     if spi:
         kws = dict(SPI_MOSI=sma_pin(1, 1),
                    SPI_MISO=sma_pin(1, 2),
@@ -26,14 +26,14 @@ def config(spi=False):
                    SPI_CS=sma_pin(1, 4))
     else:
         kws = dict()
-    return Config(TTLIN=sma_pin(0, 0), **kws)
+    return Config(TTLIN=sma_pin(0, 0), **kws, CLOCK_SHIFT=clock_shift)
 
 class InstRunnerTester(Elaboratable):
-    def __init__(self, conf, *, clock_shift=1):
+    def __init__(self, conf):
         self.pulseio = PulseIO.from_config(None, conf)
         self.csr = Registers(conf)
         self.fifos = Fifos(32)
-        self.clock_shift = clock_shift
+        self.clock_shift = conf.CLOCK_SHIFT
 
         self._write_cmd = _TestbenchIO(AdapterTrans.create(self.fifos.cmd_fifo.write))
         self.read_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.read))
@@ -248,7 +248,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_ttl(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = random.randint(10, 100)
@@ -293,7 +293,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_ttl_ovr(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = random.randint(10, 100)
@@ -338,7 +338,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_short_ttl(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = random.randint(10, 100)
@@ -390,7 +390,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_short_ttl2(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = random.randint(10, 100)
@@ -441,7 +441,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_wait(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         t1 = random.randint(1000, 2000)
         t2 = random.randint(1000, 2000)
@@ -479,7 +479,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_clockout(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         div1 = random.randint(0, 254)
         t1 = random.randint(1000, 2000)
@@ -526,7 +526,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_clockout_off(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         div1 = random.randint(0, 254)
         t1 = random.randint(1000, 2000)
@@ -572,7 +572,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_clockout_init(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         div1 = random.randint(0, 254)
         t1 = random.randint(1000, 2000)
@@ -617,7 +617,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_loopback(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         data1 = random.randint(0, 0xffff_ffff)
         data2 = random.randint(0, 0xffff_ffff)
@@ -669,7 +669,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_timecheck_succeed(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = 2
@@ -715,7 +715,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_timecheck_fail(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = 1
@@ -779,7 +779,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_clear_underflow(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = 1
@@ -829,7 +829,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_trigger_timeout1(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         t0 = random.randint(20, 100)
         ttl1 = random.randint(0, 0xffff_ffff)
@@ -882,7 +882,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_trigger_timeout2(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         t0 = random.randint(20, 100)
         ttl1 = random.randint(0, 0xffff_ffff)
@@ -943,7 +943,7 @@ class TestInstRunner(TestCaseWithSimulator):
     @pytest.mark.parametrize("trig_raise", [False, True])
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_trigger1(self, clock_shift, trig_raise):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         t0 = random.randint(20, 100)
         ttl1 = random.randint(0, 0xffff_ffff)
@@ -996,7 +996,7 @@ class TestInstRunner(TestCaseWithSimulator):
     @pytest.mark.parametrize("trig_raise", [False, True])
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_trigger2(self, clock_shift, trig_raise):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         t0 = random.randint(20, 100)
         ttl1 = random.randint(0, 0xffff_ffff)
@@ -1052,7 +1052,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_hold(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         ttl1 = random.randint(0, 0xffff_ffff)
         t1 = random.randint(10, 100)
@@ -1104,7 +1104,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_force_release(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
         fifo_depth = circ.fifos.cmd_fifo.depth + 2
 
         ttls = [random.randint(0, 0xffff_ffff) for _ in range(fifo_depth * 2)]
@@ -1160,7 +1160,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_set_freq(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         freq1 = random.randint(0, 0xffff_ffff)
@@ -1205,7 +1205,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_set_amp_phase(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         amp1 = random.randint(0, 0xfff)
@@ -1254,7 +1254,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_set_two_bytes(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         addr1 = random.randint(0, 0x7e)
@@ -1303,7 +1303,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_set_four_bytes(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         addr1 = random.randint(0, 0x7c)
@@ -1352,7 +1352,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_reset(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         id2 = random.randint(11, 21)
@@ -1395,7 +1395,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_get_two_bytes(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         addr1 = random.randint(0, 0x7e)
@@ -1456,7 +1456,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_get_four_bytes(self, clock_shift):
-        circ = InstRunnerTester(config(), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
         addr1 = random.randint(0, 0x7c)
@@ -1466,10 +1466,6 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
-            if clock_shift == 0:
-                sim.set(circ.csr.dds_read_asu, 11)
-                sim.set(circ.csr.dds_read_rdl, 7)
-                sim.set(circ.csr.dds_read_rdhoz, 10)
             await circ.write_cmd(sim, *InstBuilder.dds_get_four_bytes(id=id1, addr=addr1))
             await circ.write_cmd(sim, *InstBuilder.dds_get_four_bytes(id=id2, addr=addr2))
 
@@ -1523,7 +1519,7 @@ class TestInstRunner(TestCaseWithSimulator):
     @pytest.mark.parametrize("clock_shift", [0, 1])
     @pytest.mark.parametrize("save_result", range(2))
     def test_spi(self, spi, clock_shift, save_result):
-        circ = InstRunnerTester(config(spi=spi), clock_shift=clock_shift)
+        circ = InstRunnerTester(config(spi=spi, clock_shift=clock_shift))
 
         id = 0
         nbits = 18
