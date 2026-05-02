@@ -176,6 +176,12 @@ class ControlInterface(Elaboratable):
                                                   ('id', self.id_width),
                                                   ('last', 1)], o=[])
 
+        @read_pipe.stage(m)
+        def _():
+            pass
+
+        read_pipe.fifo(depth=2)
+
         @read_pipe.stage(m, o=[('idx', self.valid_width - 2), ('resp', 2)])
         def _(idx):
             return dict(idx=idx[:self.valid_width - 2],
