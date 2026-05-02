@@ -7,6 +7,7 @@ from transactron import TModule, Method, def_method
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO, SimpleTestCircuit
 from transactron.lib.adapters import AdapterTrans
 
+from molecube_amaranth.config import Config
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.dds import DDSController
 from molecube_amaranth.io import get_dds_ports, DDSBuff
@@ -22,7 +23,9 @@ class DDSControllerTester(Elaboratable):
         self.port = port = get_dds_ports(None, 0)
         self._buff = DDSBuff(port)
 
-        self.csr = Registers()
+        config = Config()
+
+        self.csr = Registers(config)
 
         fifo = ResultFifo(32, 256)
         self.fifo = SimpleTestCircuit(fifo)

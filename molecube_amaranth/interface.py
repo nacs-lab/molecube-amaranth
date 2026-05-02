@@ -304,10 +304,14 @@ if __name__ == '__main__':
     from amaranth.back import verilog
     from amaranth_axi.axibus import AXI4
     from transactron import TransactronContextElaboratable
+    from .config import Config
     from .csr import Registers
     from .fifo import Fifos
+
+    config = Config()
+
     m = TModule()
-    m.submodules.regs = regs = Registers()
+    m.submodules.regs = regs = Registers(config)
     m.submodules.fifos = fifos = Fifos(32)
     m.submodules.ctrl = ctrl = ControlInterface(AXI4(32, 10, 6, len_width=4).create(),
                                                 regs, fifos)

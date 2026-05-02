@@ -31,7 +31,7 @@ def config(spi=False):
 class InstRunnerTester(Elaboratable):
     def __init__(self, conf, *, clock_shift=1):
         self.pulseio = PulseIO.from_config(None, conf)
-        self.csr = Registers()
+        self.csr = Registers(conf)
         self.fifos = Fifos(32)
         self.clock_shift = clock_shift
 

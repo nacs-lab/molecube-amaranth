@@ -22,3 +22,16 @@ class Config:
 
     CLOCK_HZ: float = 200e6
     CLOCK_SHIFT: int = 1
+
+    # These numbers are in unit of half cycle, i.e. nominally 5ns
+    DDS_WRITE_ADSU_2: int = 8 # Address/Data SetUp cycles
+    DDS_WRITE_WRLOW_2: int = 8 # WRite enable LOW (assert) cycles
+    DDS_WRITE_ADHD_2: int = 8 # Address/Data HolD cycles
+    DDS_WRITE_FUDDL_2: int = 8 # FUD DeLay cycles
+    DDS_WRITE_FUDHD_2: int = 8 # FUD HolD cycle
+
+    DDS_READ_ASU_2: int = 23 # Address SetUp cycle
+    DDS_READ_RDL_2: int = 16 # Read re-init DeLay cycle
+    DDS_READ_RDHOZ_2: int = 21 # ReaD enable High to Output high-Z cycle
+
+    DDS_RESET_RSHD_2: int = 32 # ReSet HolD cycle

@@ -34,7 +34,7 @@ class TopLevel(Elaboratable):
 
         # AXI
         axi_master = ps.MAXIGP0
-        m.submodules.regs = regs = Registers()
+        m.submodules.regs = regs = Registers(self.config)
         m.submodules.fifos = fifos = Fifos(32)
         m.submodules.controller = controller = ControlInterface(axi_master, regs, fifos,
                                                                 prefix=0x7300_0000,

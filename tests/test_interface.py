@@ -11,7 +11,7 @@ from amaranth_axi.axibus import AXI4
 from amaranth_axi.axitools import AXIMasterWriteIFace, AXIMasterReadIFace
 
 from molecube_amaranth.csr import Registers
-from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION
+from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION, Config
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.interface import ControlInterface
 
@@ -28,7 +28,8 @@ def update_data(old_data, data, strb):
 
 class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9):
-        self.csr = Registers()
+        config = Config()
+        self.csr = Registers(config)
         self.fifos = Fifos(32)
         axi = AXI4(32, addr_width, 6, len_width=4).create()
         self.iface = ControlInterface(axi, self.csr, self.fifos,

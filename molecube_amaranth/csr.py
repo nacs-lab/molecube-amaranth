@@ -40,7 +40,7 @@ class Registers(Elaboratable):
     REG_WIDTH = 32
     TTL_WIDTH = 256
     CLKDIV_WIDTH = 8
-    def __init__(self):
+    def __init__(self, config):
         self.ttl_hi_mask = Signal(self.TTL_WIDTH)
         self.ttl_lo_mask = Signal(self.TTL_WIDTH)
         self.ttl_out = Signal(self.TTL_WIDTH)
@@ -49,11 +49,14 @@ class Registers(Elaboratable):
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
         self.loopback = Signal(self.REG_WIDTH)
 
-        self.dds_write_adsu = Signal(6, init=1) # Address/Data SetUp cycles - 1
-        self.dds_write_wrlow = Signal(6, init=4) # WRite enable LOW (assert) cycles - 1
-        self.dds_write_adhd = Signal(6, init=1) # Address/Data HolD cycles - 1
-        self.dds_write_fuddl = Signal(6, init=1) # FUD DeLay cycles - 1
-        self.dds_write_fudhd = Signal(6, init=4) # FUD HolD cycle - 1
+        def dds_cycle(cycle_2):
+            return (cycle_2 >> (1 - config.CLOCK_SHIFT)) - 1
+
+        self.dds_write_adsu = Signal(6, init=dds_cycle(config.DDS_WRITE_ADSU_2)) # Address/Data SetUp cycles - 1
+        self.dds_write_wrlow = Signal(6, init=dds_cycle(config.DDS_WRITE_WRLOW_2)) # WRite enable LOW (assert) cycles - 1
+        self.dds_write_adhd = Signal(6, init=dds_cycle(config.DDS_WRITE_ADHD_2)) # Address/Data HolD cycles - 1
+        self.dds_write_fuddl = Signal(6, init=dds_cycle(config.DDS_WRITE_FUDDL_2)) # FUD DeLay cycles - 1
+        self.dds_write_fudhd = Signal(6, init=dds_cycle(config.DDS_WRITE_FUDHD_2)) # FUD HolD cycle - 1
         self.dds_timing1 = Cat(self.dds_write_adsu,
                                self.dds_write_wrlow,
                                self.dds_write_adhd,
@@ -61,11 +64,11 @@ class Registers(Elaboratable):
                                self.dds_write_fudhd)
 
 
-        self.dds_read_asu = Signal(6, init=22) # Address SetUp cycle - 1
-        self.dds_read_rdl = Signal(6, init=15) # Read re-init DeLay cycle - 1
-        self.dds_read_rdhoz = Signal(6, init=20) # ReaD enable High to Output high-Z cycle - 1
+        self.dds_read_asu = Signal(6, init=dds_cycle(config.DDS_READ_ASU_2)) # Address SetUp cycle - 1
+        self.dds_read_rdl = Signal(6, init=dds_cycle(config.DDS_READ_RDL_2)) # Read re-init DeLay cycle - 1
+        self.dds_read_rdhoz = Signal(6, init=dds_cycle(config.DDS_READ_RDHOZ_2)) # ReaD enable High to Output high-Z cycle - 1
 
-        self.dds_reset_rshd = Signal(6, init=31) # ReSet HolD cycle - 1
+        self.dds_reset_rshd = Signal(6, init=dds_cycle(config.DDS_RESET_RSHD_2)) # ReSet HolD cycle - 1
 
         self.dds_timing2 = Cat(self.dds_read_asu,
                                self.dds_read_rdl,
