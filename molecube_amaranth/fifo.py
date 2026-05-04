@@ -10,6 +10,7 @@ from amaranth_axi.adaptors import InAdaptor, OutAdaptor
 
 from transactron import TModule, Transaction, Method, def_method
 
+from .utils import oring_combiner
 
 def _incr(signal, modulo):
     if modulo == 2 ** len(signal):
@@ -174,13 +175,7 @@ class ResultFifo(Elaboratable):
                 res = in_adaptor.input(m).DATA
             return Mux(read_trans.run, res, 0)
 
-        def combiner(m, args, runs):
-            data = C(0, 8)
-            for i, v in enumerate(args):
-                data = data | Mux(runs[i], v.data, 0)
-            return {"data": data}
-
-        @def_method(m, self.write, combiner=combiner, nonexclusive=True)
+        @def_method(m, self.write, combiner=oring_combiner, nonexclusive=True)
         def _(data):
             with Transaction().body(m):
                 out_adaptor.output(m, data)

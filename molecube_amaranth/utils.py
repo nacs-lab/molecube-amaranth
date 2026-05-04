@@ -65,7 +65,9 @@ def assign_xvalue(m, s, *, domain='sync'):
 def oring_combiner(m, args, runs):
     arg0 = args[0]
     shape = arg0.shape()
-    res = C(0, len(Value.cast(arg0)))
+    res = Mux(runs[0], Value.cast(arg0), 0)
     for i, v in enumerate(args):
+        if i == 0:
+            continue
         res = res | Mux(runs[i], Value.cast(v), 0)
     return View(shape, res)
