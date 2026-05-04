@@ -14,10 +14,11 @@ from .csr import Registers
 from .utils import xvalue
 
 class ControlInterface(Elaboratable):
-    DATA_WIDTH = 32
     def __init__(self, axi, csr_regs, fifos, prefix=0, valid_width=None):
         self.axi = axi
         self.addr_width = len(axi.AWADDR)
+        self.data_width = len(axi.WDATA)
+        assert self.data_width == 32
         self.id_width = len(axi.AWID)
         self.csr_regs = csr_regs
         self.fifos = fifos
@@ -79,13 +80,14 @@ class ControlInterface(Elaboratable):
             csr.dbg_result_generated.count(m)
 
         # Buffer for command fifo to simplify write combinational logic
-        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', 32)], 2)
+        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
         with Transaction().body(m):
             self.fifos.cmd_fifo.write(m, cmd_pre_fifo.read(m))
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
-                                                    ('data', 32), ('strb', 4)], o=[])
+                                                    ('data', self.data_width),
+                                                    ('strb', 4)], o=[])
 
         @write_pipe.stage(m)
         def _(idx, data):
@@ -136,17 +138,17 @@ class ControlInterface(Elaboratable):
 
                 with m.Case(0x50):
                     axi_write_reg(m, Cat(csr_shadow.dds_timing1,
-                                         Signal(32 - len(csr_shadow.dds_timing1))),
+                                         Signal(self.data_width - len(csr_shadow.dds_timing1))),
                                   data, strb)
                 with m.Case(0x51):
                     axi_write_reg(m, Cat(csr_shadow.dds_timing2,
-                                         Signal(32 - len(csr_shadow.dds_timing2))),
+                                         Signal(self.data_width - len(csr_shadow.dds_timing2))),
                                   data, strb)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
             start_prewrite = prewrite_pipe.create_external(
-                i=[('idx', self.addr_width - 2), ('data', 32),
+                i=[('idx', self.addr_width - 2), ('data', self.data_width),
                    ('strb', 4), ('id', self.id_width), ('last', 1)], o=[])
 
             @prewrite_pipe.stage(m)
@@ -187,14 +189,14 @@ class ControlInterface(Elaboratable):
             return dict(idx=idx[:self.valid_width - 2],
                         resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
 
-        @read_pipe.stage(m, o=[('data', self.DATA_WIDTH)])
+        @read_pipe.stage(m, o=[('data', self.data_width)])
         def _(idx, resp):
-            res = Signal(self.DATA_WIDTH)
+            res = Signal(self.data_width)
             with m.If((idx == 0x1f) & ~resp[0]):
                 csr.dbg_result_consumed.count(m)
                 m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
             with m.Else():
-                m.d.av_comb += res.eq(xvalue(m, 32))
+                m.d.av_comb += res.eq(xvalue(m, self.data_width))
             return dict(data=res)
 
         @read_pipe.stage(m)
@@ -207,7 +209,7 @@ class ControlInterface(Elaboratable):
                 0x02: csr_shadow.timing_status,
                 0x03: csr_shadow.timing_ctrl,
                 0x04: ttl_out_reg(0),
-                0x05: C(0, self.DATA_WIDTH) | csr_shadow.clockout_div,
+                0x05: C(0, self.data_width) | csr_shadow.clockout_div,
                 0x06: MAJOR_VERSION,
                 0x07: MINOR_VERSION,
                 0x10: ttl_hi_reg(1),
@@ -251,8 +253,8 @@ class ControlInterface(Elaboratable):
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
 
-                0x50: csr_shadow.dds_timing1 | C(0, 32),
-                0x51: csr_shadow.dds_timing2 | C(0, 32),
+                0x50: csr_shadow.dds_timing1 | C(0, self.data_width),
+                0x51: csr_shadow.dds_timing2 | C(0, self.data_width),
         }
 
         read_regs = list(read_regs.items())
@@ -262,9 +264,9 @@ class ControlInterface(Elaboratable):
         for start_idx in range(0, nread_regs, batch_sz):
             end_idx = min(nread_regs, start_idx + batch_sz)
             assert start_idx != end_idx
-            @read_pipe.stage(m, o=[('data', self.DATA_WIDTH)])
+            @read_pipe.stage(m, o=[('data', self.data_width)])
             def _(idx, data):
-                res = Signal(self.DATA_WIDTH)
+                res = Signal(self.data_width)
                 with m.Switch(idx):
                     with m.Case(0x1f):
                         m.d.av_comb += res.eq(data)
@@ -277,7 +279,7 @@ class ControlInterface(Elaboratable):
                         with m.Case(reg_idx):
                             m.d.av_comb += res.eq(reg_val)
                     with m.Default():
-                        m.d.av_comb += res.eq(xvalue(m, 32))
+                        m.d.av_comb += res.eq(xvalue(m, self.data_width))
                 return dict(data=res)
 
             @read_pipe.stage(m)
