@@ -58,7 +58,6 @@ class InterfaceWrapper(Elaboratable):
             0x05: self.csr.clockout_div,
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
-            0x1e: self.csr.loopback,
             0x20: self.csr.dbg_inst_word_count.value,
             0x21: self.csr.dbg_inst_count.value,
             0x22: self.csr.dbg_ttl_count.value,
@@ -104,6 +103,7 @@ class InterfaceWrapper(Elaboratable):
             0x1b: self.ttl_lo_reg(6),
             0x1c: self.ttl_hi_reg(7),
             0x1d: self.ttl_lo_reg(7),
+            0x1e: self.csr.loopback,
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
         }

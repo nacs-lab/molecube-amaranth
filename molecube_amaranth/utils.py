@@ -71,3 +71,39 @@ def oring_combiner(m, args, runs):
             continue
         res = res | Mux(runs[i], Value.cast(v), 0)
     return View(shape, res)
+
+class RegChain(Elaboratable):
+    def __init__(self, output, input, levels):
+        self.input = input
+        self.output = output
+        self.levels = levels
+
+    def elaborate(self, plat):
+        m = Module()
+
+        if self.levels == 0:
+            m.d.comb += self.output.eq(self.input)
+        else:
+            src = self.input
+            for _ in range(self.levels - 1):
+                tgt = Signal.like(src)
+                m.d.sync += tgt.eq(src)
+                src = tgt
+            m.d.sync += self.output.eq(src)
+
+        return m
+
+def reg_chain(m, *, input=None, levels, output=None):
+    if input is None and output is None:
+        raise TypeError("At least one of input and output must be provided")
+    if levels == 0:
+        if output is None:
+            return input, input
+        if input is None:
+            return output, output
+    if output is None:
+        output = Signal.like(input)
+    elif input is None:
+        input = Signal.like(output)
+    m.submodules += RegChain(output, input, levels)
+    return output, input

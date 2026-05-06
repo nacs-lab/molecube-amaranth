@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
 from .csr import Registers
-from .utils import xvalue
+from .utils import xvalue, reg_chain
 
 class ControlInterface(Elaboratable):
     def __init__(self, axi, csr_regs, fifos, prefix=0, valid_width=None):
@@ -35,46 +35,41 @@ class ControlInterface(Elaboratable):
         m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
                                                                  buffered=True)
 
-        csr_shadow0 = SimpleNamespace()
-        csr_shadow = SimpleNamespace()
+        wr_shadow = SimpleNamespace()
+        rd_shadow = SimpleNamespace()
 
         csr = self.csr_regs
 
-        for wr_reg in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
-                       'dds_timing1', 'dds_timing2']:
-            tgt = getattr(csr, wr_reg)
-            src0 = Signal.like(tgt)
-            src = Signal.like(tgt)
-            setattr(csr_shadow0, wr_reg, src0)
-            setattr(csr_shadow, wr_reg, src)
-            m.d.sync += [tgt.eq(src0), src0.eq(src)]
+        for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
+                         'dds_timing1', 'dds_timing2', 'loopback']:
+            real_reg = getattr(csr, reg_name)
+            rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
+            _, wr_reg = reg_chain(m, output=real_reg, levels=2)
+            setattr(wr_shadow, reg_name, wr_reg)
+            setattr(rd_shadow, reg_name, rd_reg)
 
-        for rd_reg in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count']:
-            src = getattr(csr, rd_reg)
-            tgt0 = Signal.like(src)
-            tgt = Signal.like(src)
-            setattr(csr_shadow0, rd_reg, tgt0)
-            setattr(csr_shadow, rd_reg, tgt)
-            m.d.sync += [tgt0.eq(src), tgt.eq(tgt0)]
+        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count']:
+            real_reg = getattr(csr, reg_name)
+            rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
+            setattr(rd_shadow, reg_name, rd_reg)
 
         for (k, c) in csr.all_counters.items():
             cv = c.value
-            tgt0 = Signal.like(cv)
-            tgt = Signal.like(cv)
-            setattr(csr_shadow0, k, tgt0)
-            setattr(csr_shadow, k, tgt)
-            m.d.sync += [tgt0.eq(cv), tgt.eq(tgt0)]
+            rd_reg, _ = reg_chain(m, input=cv, levels=2)
+            setattr(rd_shadow, k, rd_reg)
 
-        ttl_out = csr_shadow.ttl_out
-        ttl_hi_mask = csr_shadow.ttl_hi_mask
-        ttl_lo_mask = csr_shadow.ttl_lo_mask
+        def rd_ttl_hi(idx):
+            return rd_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
+        def rd_ttl_lo(idx):
+            return rd_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
 
-        def ttl_hi_reg(idx):
-            return ttl_hi_mask[idx * 32:(idx + 1) * 32]
-        def ttl_lo_reg(idx):
-            return ttl_lo_mask[idx * 32:(idx + 1) * 32]
+        def wr_ttl_hi(idx):
+            return wr_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
+        def wr_ttl_lo(idx):
+            return wr_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
+
         def ttl_out_reg(idx):
-            return ttl_out[idx * 32:(idx + 1) * 32]
+            return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
 
         with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
             csr.dbg_result_generated.count(m)
@@ -99,50 +94,50 @@ class ControlInterface(Elaboratable):
         def _(idx, data, strb):
             with m.Switch(idx):
                 with m.Case(0x00):
-                    axi_write_reg(m, ttl_hi_reg(0), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(0), data, strb)
                 with m.Case(0x01):
-                    axi_write_reg(m, ttl_lo_reg(0), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(0), data, strb)
                 with m.Case(0x03):
-                    axi_write_reg(m, csr_shadow.timing_ctrl, data, strb)
+                    axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
 
                 with m.Case(0x10):
-                    axi_write_reg(m, ttl_hi_reg(1), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(1), data, strb)
                 with m.Case(0x11):
-                    axi_write_reg(m, ttl_lo_reg(1), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(1), data, strb)
                 with m.Case(0x12):
-                    axi_write_reg(m, ttl_hi_reg(2), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(2), data, strb)
                 with m.Case(0x13):
-                    axi_write_reg(m, ttl_lo_reg(2), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(2), data, strb)
                 with m.Case(0x14):
-                    axi_write_reg(m, ttl_hi_reg(3), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(3), data, strb)
                 with m.Case(0x15):
-                    axi_write_reg(m, ttl_lo_reg(3), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(3), data, strb)
                 with m.Case(0x16):
-                    axi_write_reg(m, ttl_hi_reg(4), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(4), data, strb)
                 with m.Case(0x17):
-                    axi_write_reg(m, ttl_lo_reg(4), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(4), data, strb)
                 with m.Case(0x18):
-                    axi_write_reg(m, ttl_hi_reg(5), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(5), data, strb)
                 with m.Case(0x19):
-                    axi_write_reg(m, ttl_lo_reg(5), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(5), data, strb)
                 with m.Case(0x1a):
-                    axi_write_reg(m, ttl_hi_reg(6), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(6), data, strb)
                 with m.Case(0x1b):
-                    axi_write_reg(m, ttl_lo_reg(6), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(6), data, strb)
                 with m.Case(0x1c):
-                    axi_write_reg(m, ttl_hi_reg(7), data, strb)
+                    axi_write_reg(m, wr_ttl_hi(7), data, strb)
                 with m.Case(0x1d):
-                    axi_write_reg(m, ttl_lo_reg(7), data, strb)
+                    axi_write_reg(m, wr_ttl_lo(7), data, strb)
                 with m.Case(0x1e):
-                    axi_write_reg(m, csr.loopback, data, strb)
+                    axi_write_reg(m, wr_shadow.loopback, data, strb)
 
                 with m.Case(0x50):
-                    axi_write_reg(m, Cat(csr_shadow.dds_timing1,
-                                         Signal(self.data_width - len(csr_shadow.dds_timing1))),
+                    axi_write_reg(m, Cat(wr_shadow.dds_timing1,
+                                         Signal(self.data_width - len(wr_shadow.dds_timing1))),
                                   data, strb)
                 with m.Case(0x51):
-                    axi_write_reg(m, Cat(csr_shadow.dds_timing2,
-                                         Signal(self.data_width - len(csr_shadow.dds_timing2))),
+                    axi_write_reg(m, Cat(wr_shadow.dds_timing2,
+                                         Signal(self.data_width - len(wr_shadow.dds_timing2))),
                                   data, strb)
 
         if self.valid_width != self.addr_width:
@@ -204,46 +199,46 @@ class ControlInterface(Elaboratable):
             pass
 
         read_regs = {
-                0x00: ttl_hi_reg(0),
-                0x01: ttl_lo_reg(0),
-                0x02: csr_shadow.timing_status,
-                0x03: csr_shadow.timing_ctrl,
+                0x00: rd_ttl_hi(0),
+                0x01: rd_ttl_lo(0),
+                0x02: rd_shadow.timing_status,
+                0x03: rd_shadow.timing_ctrl,
                 0x04: ttl_out_reg(0),
-                0x05: C(0, self.data_width) | csr_shadow.clockout_div,
+                0x05: C(0, self.data_width) | rd_shadow.clockout_div,
                 0x06: MAJOR_VERSION,
                 0x07: MINOR_VERSION,
-                0x10: ttl_hi_reg(1),
-                0x11: ttl_lo_reg(1),
-                0x12: ttl_hi_reg(2),
-                0x13: ttl_lo_reg(2),
-                0x14: ttl_hi_reg(3),
-                0x15: ttl_lo_reg(3),
-                0x16: ttl_hi_reg(4),
-                0x17: ttl_lo_reg(4),
-                0x18: ttl_hi_reg(5),
-                0x19: ttl_lo_reg(5),
-                0x1a: ttl_hi_reg(6),
-                0x1b: ttl_lo_reg(6),
-                0x1c: ttl_hi_reg(7),
-                0x1d: ttl_lo_reg(7),
-                0x1e: csr.loopback,
-                0x20: csr_shadow.dbg_inst_word_count,
-                0x21: csr_shadow.dbg_inst_count,
-                0x22: csr_shadow.dbg_ttl_count,
-                0x23: csr_shadow.dbg_dds_count,
-                0x24: csr_shadow.dbg_wait_count,
-                0x25: csr_shadow.dbg_clear_count,
-                0x26: csr_shadow.dbg_loopback_count,
-                0x27: csr_shadow.dbg_clock_count,
-                0x28: csr_shadow.dbg_spi_count,
-                0x29: csr_shadow.dbg_underflow_cycle,
-                0x2a: csr_shadow.dbg_inst_cycle,
-                # 0x2b: csr_shadow.dbg_ttl_cycle,
-                # 0x2c: csr_shadow.dbg_wait_cycle,
-                # 0x2d: csr_shadow.dbg_result_overflow_count,
-                0x2e: csr_shadow.dbg_result_count,
-                0x2f: csr_shadow.dbg_result_generated,
-                0x30: csr_shadow.dbg_result_consumed,
+                0x10: rd_ttl_hi(1),
+                0x11: rd_ttl_lo(1),
+                0x12: rd_ttl_hi(2),
+                0x13: rd_ttl_lo(2),
+                0x14: rd_ttl_hi(3),
+                0x15: rd_ttl_lo(3),
+                0x16: rd_ttl_hi(4),
+                0x17: rd_ttl_lo(4),
+                0x18: rd_ttl_hi(5),
+                0x19: rd_ttl_lo(5),
+                0x1a: rd_ttl_hi(6),
+                0x1b: rd_ttl_lo(6),
+                0x1c: rd_ttl_hi(7),
+                0x1d: rd_ttl_lo(7),
+                0x1e: rd_shadow.loopback,
+                0x20: rd_shadow.dbg_inst_word_count,
+                0x21: rd_shadow.dbg_inst_count,
+                0x22: rd_shadow.dbg_ttl_count,
+                0x23: rd_shadow.dbg_dds_count,
+                0x24: rd_shadow.dbg_wait_count,
+                0x25: rd_shadow.dbg_clear_count,
+                0x26: rd_shadow.dbg_loopback_count,
+                0x27: rd_shadow.dbg_clock_count,
+                0x28: rd_shadow.dbg_spi_count,
+                0x29: rd_shadow.dbg_underflow_cycle,
+                0x2a: rd_shadow.dbg_inst_cycle,
+                # 0x2b: rd_shadow.dbg_ttl_cycle,
+                # 0x2c: rd_shadow.dbg_wait_cycle,
+                # 0x2d: rd_shadow.dbg_result_overflow_count,
+                0x2e: rd_shadow.dbg_result_count,
+                0x2f: rd_shadow.dbg_result_generated,
+                0x30: rd_shadow.dbg_result_consumed,
 
                 0x40: ttl_out_reg(1),
                 0x41: ttl_out_reg(2),
@@ -253,8 +248,8 @@ class ControlInterface(Elaboratable):
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
 
-                0x50: csr_shadow.dds_timing1 | C(0, self.data_width),
-                0x51: csr_shadow.dds_timing2 | C(0, self.data_width),
+                0x50: rd_shadow.dds_timing1 | C(0, self.data_width),
+                0x51: rd_shadow.dds_timing2 | C(0, self.data_width),
         }
 
         read_regs = list(read_regs.items())
