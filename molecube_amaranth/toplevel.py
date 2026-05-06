@@ -33,10 +33,9 @@ class TopLevel(Elaboratable):
         m.submodules.reset_sync = reset_sync
 
         # AXI
-        axi_master = ps.MAXIGP0
         m.submodules.regs = regs = Registers(self.config)
         m.submodules.fifos = fifos = Fifos(32)
-        m.submodules.controller = controller = ControlInterface(axi_master, regs, fifos,
+        m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,
                                                                 prefix=0x7300_0000,
                                                                 valid_width=9)
 
