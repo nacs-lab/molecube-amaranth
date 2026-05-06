@@ -450,6 +450,8 @@ class InstRunner(Elaboratable):
             self.csr.dbg_spi_count.clear(m)
             self.csr.dbg_underflow_cycle.clear(m)
             self.csr.dbg_inst_cycle.clear(m)
+            self.csr.dbg_result_generated.clear(m)
+            self.csr.dbg_result_consumed.clear(m)
             # self.csr.dbg_ttl_cycle.clear(m)
             # self.csr.dbg_wait_cycle.clear(m)
             m.d.sync += [state.eq(RunState.FETCH),
