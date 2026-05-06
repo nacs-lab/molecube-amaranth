@@ -151,6 +151,9 @@ class ResultFifo(Elaboratable):
         self.write = Method(i=self._layout)
         self.read = Method(o=self._layout)
         self.level = Signal(range(depth + 1))
+        # The legacy API only expose 5 bits, we just need to make sure this number
+        # is not zero if the fifo is not empty and that it's not more than the actual count
+        self.user_level = Signal(5)
 
     def elaborate(self, plat):
         m = TModule()
@@ -165,8 +168,19 @@ class ResultFifo(Elaboratable):
         # Only include the out adaptor one if the actual fifo is not empty
         # Otherwise we can't guarantee that
         # the user can actually read all of those out yet.
-        m.d.comb += self.level.eq(fifo.level + in_adaptor.LEVEL +
+        m.d.comb += self.level.eq((fifo.level + in_adaptor.LEVEL) +
                                   (out_adaptor.LEVEL & fifo.r_rdy))
+
+        # Construct a fast and conservative result level for user API
+        est_level = Signal.like(fifo.level)
+        m.d.comb += est_level.eq((fifo.level + in_adaptor.LEVEL) |
+                                 (out_adaptor.LEVEL & fifo.r_rdy))
+
+        user_len = len(self.user_level)
+        user_level = est_level[:user_len]
+        for i in range(user_len, len(est_level), user_len):
+            user_level = user_level | est_level[i:i + user_len]
+        m.d.comb += self.user_level.eq(user_level)
 
         @def_method(m, self.read)
         def _():

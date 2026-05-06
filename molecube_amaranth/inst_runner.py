@@ -166,7 +166,7 @@ class InstRunner(Elaboratable):
         m.d.sync += [self.csr.timing_status.eq(timing_status),
                      timing_status.eq(Cat(underflow, trigger_timeout,
                                           pulses_finished,
-                                          self.fifos.result_fifo.level) | C(0, 32))]
+                                          self.fifos.result_fifo.user_level) | C(0, 32))]
 
         # Control
         pulse_hold = self.csr.timing_ctrl[7]
