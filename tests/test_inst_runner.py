@@ -637,19 +637,19 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) & 7 == 0x4
 
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             assert (await circ.read_result.call(sim)).data == data1
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             assert (await circ.read_result.call(sim)).data == data2
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 0
+            assert sim.get(circ.csr.timing_status) >> 4 == 0
 
             assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
@@ -1415,28 +1415,28 @@ class TestInstRunner(TestCaseWithSimulator):
             circ.dds_get_two_bytes(id1, addr1, data1)
             for _ in range(50 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
             circ.dds_get_two_bytes(id2, addr2, data2)
             for _ in range(50 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
             for _ in range(5):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) == 0x14
+                assert sim.get(circ.csr.timing_status) == 0x24
 
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             assert (await circ.read_result.call(sim)).data == data1
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             assert (await circ.read_result.call(sim)).data == data2
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 0
+            assert sim.get(circ.csr.timing_status) >> 4 == 0
 
             assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
@@ -1476,28 +1476,28 @@ class TestInstRunner(TestCaseWithSimulator):
             circ.dds_get_four_bytes(id1, addr1, data1)
             for _ in range(50 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
             circ.dds_get_four_bytes(id2, addr2, data2)
             for _ in range(50 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
             for _ in range(5):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) == 0x14
+                assert sim.get(circ.csr.timing_status) == 0x24
 
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             assert (await circ.read_result.call(sim)).data == data1
-            assert sim.get(circ.csr.timing_status) >> 3 == 2
+            assert sim.get(circ.csr.timing_status) >> 4 == 2
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             assert (await circ.read_result.call(sim)).data == data2
-            assert sim.get(circ.csr.timing_status) >> 3 == 1
+            assert sim.get(circ.csr.timing_status) >> 4 == 1
             # two cycles delay before the new number of result shows up
             await sim.tick()
             await sim.tick()
-            assert sim.get(circ.csr.timing_status) >> 3 == 0
+            assert sim.get(circ.csr.timing_status) >> 4 == 0
 
             assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
@@ -1560,31 +1560,31 @@ class TestInstRunner(TestCaseWithSimulator):
                          data=data1, result=result_data1)
             for _ in range(45 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
 
             circ.spi_set(id=id, div=div2 << circ.clock_shift, nbits=18, pha=0, pol=1,
                          data=data2, result=result_data2)
             for _ in range(45 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
 
             circ.spi_set(id=id, div=div3 << circ.clock_shift, nbits=18, pha=1, pol=0,
                          data=data3, result=result_data3)
             for _ in range(45 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
 
             circ.spi_set(id=id, div=div4 << circ.clock_shift, nbits=18, pha=1, pol=1,
                          data=data4, result=result_data4)
             for _ in range(45 << circ.clock_shift):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) & 0x7 == 0x0
+                assert sim.get(circ.csr.timing_status) & 0xf == 0x0
 
             nres = 4 if save_result else 0
 
             for _ in range(5):
                 await sim.tick()
-                assert sim.get(circ.csr.timing_status) == 0x4 | (nres << 3)
+                assert sim.get(circ.csr.timing_status) == 0x4 | (nres << 4)
 
             assert sim.get(circ.csr.dbg_inst_count.value) == 4
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
@@ -1602,11 +1602,11 @@ class TestInstRunner(TestCaseWithSimulator):
             if save_result:
                 for i in range(4):
                     assert (await circ.read_result.call(sim)).data == result_datas[i]
-                    assert sim.get(circ.csr.timing_status) >> 3 == 4 - i
+                    assert sim.get(circ.csr.timing_status) >> 4 == 4 - i
                     # two cycles delay before the new number of result shows up
                     await sim.tick()
                     await sim.tick()
-                    assert sim.get(circ.csr.timing_status) >> 3 == 4 - i - 1
+                    assert sim.get(circ.csr.timing_status) >> 4 == 4 - i - 1
 
             assert sim.get(circ.csr.timing_status) == 0x4
 

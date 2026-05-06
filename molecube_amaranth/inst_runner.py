@@ -102,6 +102,12 @@ DECODED_INST = StructLayout(dict(op=InstOpCode,
                                  spi=SPI_DECODE0,
                                  time_check=1,
                                  timer=24))
+TIME_STATUS_STRUCT = FlexibleLayout(32, dict(
+    underflow=Field(unsigned(1), 0),
+    trigger_timeout=Field(unsigned(1), 1),
+    pulses_finished=Field(unsigned(1), 2),
+    results=Field(unsigned(5), 4),
+))
 
 class RunState(enum.Enum):
     FETCH = 0
@@ -162,12 +168,13 @@ class InstRunner(Elaboratable):
         pulses_finished = Signal(1, init=1)
         # delay underflow/trigger_timeout/pulses_finished flag by one cycle to match
         # output timing
-        timing_status = Signal(32, init=0x4)
-        m.d.sync += [self.csr.timing_status.eq(timing_status),
+        timing_status = View(TIME_STATUS_STRUCT, Signal(32, init=0x4))
+        m.d.sync += [self.csr.timing_status.eq(timing_status.as_value()),
                      self.csr.dbg_result_count.eq(self.fifos.result_fifo.level),
-                     timing_status.eq(Cat(underflow, trigger_timeout,
-                                          pulses_finished,
-                                          self.fifos.result_fifo.user_level) | C(0, 32))]
+                     timing_status.underflow.eq(underflow),
+                     timing_status.trigger_timeout.eq(trigger_timeout),
+                     timing_status.pulses_finished.eq(pulses_finished),
+                     timing_status.results.eq(self.fifos.result_fifo.user_level)]
 
         # Control
         pulse_hold = self.csr.timing_ctrl[7]
