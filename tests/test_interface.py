@@ -73,7 +73,7 @@ class InterfaceWrapper(Elaboratable):
             # 0x2b: self.csr.dbg_ttl_cycle.value,
             # 0x2c: self.csr.dbg_wait_cycle.value,
             # 0x2d: self.csr.dbg_result_overflow_count.value,
-            # 0x2e: self.csr.dbg_result_count.value,
+            0x2e: self.csr.dbg_result_count,
             0x2f: self.csr.dbg_result_generated.value,
             0x30: self.csr.dbg_result_consumed.value,
 

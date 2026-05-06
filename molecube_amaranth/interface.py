@@ -49,7 +49,7 @@ class ControlInterface(Elaboratable):
             setattr(csr_shadow, wr_reg, src)
             m.d.sync += [tgt.eq(src0), src0.eq(src)]
 
-        for rd_reg in ['ttl_out', 'timing_status', 'clockout_div']:
+        for rd_reg in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count']:
             src = getattr(csr, rd_reg)
             tgt0 = Signal.like(src)
             tgt = Signal.like(src)
@@ -241,7 +241,7 @@ class ControlInterface(Elaboratable):
                 # 0x2b: csr_shadow.dbg_ttl_cycle,
                 # 0x2c: csr_shadow.dbg_wait_cycle,
                 # 0x2d: csr_shadow.dbg_result_overflow_count,
-                # 0x2e: csr_shadow.dbg_result_count,
+                0x2e: csr_shadow.dbg_result_count,
                 0x2f: csr_shadow.dbg_result_generated,
                 0x30: csr_shadow.dbg_result_consumed,
 

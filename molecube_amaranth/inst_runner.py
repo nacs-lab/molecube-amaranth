@@ -164,6 +164,7 @@ class InstRunner(Elaboratable):
         # output timing
         timing_status = Signal(32, init=0x4)
         m.d.sync += [self.csr.timing_status.eq(timing_status),
+                     self.csr.dbg_result_count.eq(self.fifos.result_fifo.level),
                      timing_status.eq(Cat(underflow, trigger_timeout,
                                           pulses_finished,
                                           self.fifos.result_fifo.user_level) | C(0, 32))]

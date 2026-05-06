@@ -75,6 +75,8 @@ class Registers(Elaboratable):
                                self.dds_read_rdhoz,
                                self.dds_reset_rshd)
 
+        self.dbg_result_count = Signal(self.REG_WIDTH)
+
         self.all_counters = dict(
             dbg_inst_word_count=Counter(self.REG_WIDTH),
             dbg_inst_count=Counter(self.REG_WIDTH),
@@ -90,7 +92,6 @@ class Registers(Elaboratable):
             # dbg_ttl_cycle=Counter(self.REG_WIDTH),
             # dbg_wait_cycle=Counter(self.REG_WIDTH),
             # dbg_result_overflow_count=Counter(self.REG_WIDTH),
-            # dbg_result_count=Counter(self.REG_WIDTH),
             dbg_result_generated=Counter(self.REG_WIDTH),
             dbg_result_consumed=Counter(self.REG_WIDTH),
         )
