@@ -63,7 +63,8 @@ class CountKeeper(Elaboratable):
         return m
 
 class AXIReadStream(Elaboratable):
-    def __init__(self, axi, block_len, blocks_width, max_width=None):
+    def __init__(self, axi, block_len, blocks_width, max_width=None,
+                 const_user=0, const_cache=0):
         self.axi = axi
         self.addr_width = len(axi.ARADDR)
         self.data_width = len(axi.RDATA)
@@ -73,6 +74,8 @@ class AXIReadStream(Elaboratable):
         assert block_len <= 1 << len(axi.ARLEN)
         self.queue = Method(i=[('addr', self.addr_width), ('blocks', blocks_width)])
         self.get = Method(o=[('data', self.data_width), ('last', 1)])
+        self.const_user = const_user
+        self.const_cache = const_cache
 
     def elaborate(self, plat):
         m = TModule()
@@ -93,7 +96,9 @@ class AXIReadStream(Elaboratable):
             const_id=0,
             const_size=exact_log2(self.data_width) - 3,
             const_len=self.block_len - 1,
-            const_burst=1)
+            const_burst=1,
+            const_cache=self.const_cache,
+            const_user=self.const_user)
 
         m.submodules.count_keeper = count_keeper = CountKeeper(self.blocks_width)
 
