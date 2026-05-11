@@ -178,6 +178,7 @@ class DDSController(Elaboratable):
             m.d.sync += hold_cnt.eq(hold_cnt - 1)
             with m.Switch(fsm_state):
                 with m.Case(FSMState.IDLE):
+                    assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
 
@@ -249,20 +250,20 @@ class DDSController(Elaboratable):
                 with m.Case(FSMState.WR_FUDHOLD):
                     # Deassert IO update
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
-                                 hold_cnt.eq(0),
                                  dds_cs.eq(0),
                                  dds_fud.eq(0),
                                  dds_addr.eq(0),
                                  dds_data_out.eq(0)]
+                    assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
 
                 with m.Case(FSMState.RESET):
                     # Done reset
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
-                                 hold_cnt.eq(0),
                                  dds_cs.eq(0),
                                  dds_reset.eq(0)]
+                    assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
 
@@ -290,12 +291,13 @@ class DDSController(Elaboratable):
                     assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.RD_FINISH):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
-                                 hold_cnt.eq(0),
                                  dds_cs.eq(0),
                                  dds_data_oe.eq(1)]
+                    assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
                 with m.Default():
+                    assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
 
