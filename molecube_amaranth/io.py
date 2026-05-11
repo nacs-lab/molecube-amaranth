@@ -17,7 +17,9 @@ def get_dds_ports(plat, i):
                 f"fmc_{i}:LA11_N fmc_{i}:LA12_N fmc_{i}:LA11_P fmc_{i}:LA12_P "
                 f"fmc_{i}:LA07_N fmc_{i}:LA08_N fmc_{i}:LA07_P fmc_{i}:LA08_P "
                 f"fmc_{i}:LA04_N fmc_{i}:LA03_N fmc_{i}:LA04_P fmc_{i}:LA03_P", dir="io")
-    ctrl = Pins(f"fmc_{i}:LA24_P fmc_{i}:LA25_N fmc_{i}:LA25_P", dir="o")
+    wrb = Pins(f"fmc_{i}:LA24_P", dir="o")
+    rdb = Pins(f"fmc_{i}:LA25_N", dir="o")
+    reset = Pins(f"fmc_{i}:LA25_P", dir="o")
     fud = Pins(f"fmc_{i}:LA21_N", dir="o")
     cs = Pins(f"fmc_{i}:LA24_N fmc_{i}:LA29_P fmc_{i}:LA28_P fmc_{i}:LA29_N "
               f"fmc_{i}:LA28_N fmc_{i}:LA31_P fmc_{i}:LA30_P fmc_{i}:LA31_N "
@@ -27,14 +29,17 @@ def get_dds_ports(plat, i):
         port = SimpleNamespace()
         port.addr = _sim_port(addr)
         port.data = _sim_port(data)
-        port.ctrl = _sim_port(ctrl)
+        port.wrb = _sim_port(wrb)
+        port.rdb = _sim_port(rdb)
+        port.reset = _sim_port(reset)
         port.fud = _sim_port(fud)
         port.cs = _sim_port(cs)
         return port
 
     plat.add_resources(
         [Resource("DDS", i, Subsignal("addr", addr), Subsignal("data", data),
-                  Subsignal("ctrl", ctrl), Subsignal("fud", fud),
+                  Subsignal("wrb", wrb), Subsignal("rdb", rdb),
+                  Subsignal("reset", reset), Subsignal("fud", fud),
                   Subsignal("cs", cs), Attrs(IOSTANDARD="LVCMOS33", DRIVE="4"))])
     return plat.request("DDS", i, dir="-")
 
@@ -111,7 +116,9 @@ class DDSBuff(Elaboratable):
     def __init__(self, ddsport):
         self.addr = io.Buffer("o", ddsport.addr)
         self.data = io.Buffer("io", ddsport.data)
-        self.ctrl = io.Buffer("o", ddsport.ctrl)
+        self.wrb = io.Buffer("o", ddsport.wrb)
+        self.rdb = io.Buffer("o", ddsport.rdb)
+        self.reset = io.Buffer("o", ddsport.reset)
         self.fud = io.Buffer("o", ddsport.fud)
         self.cs = io.Buffer("o", ddsport.cs)
 
@@ -120,7 +127,9 @@ class DDSBuff(Elaboratable):
 
         m.submodules.addr = self.addr
         m.submodules.data = self.data
-        m.submodules.ctrl = self.ctrl
+        m.submodules.wrb = self.wrb
+        m.submodules.rdb = self.rdb
+        m.submodules.reset = self.reset
         m.submodules.fud = self.fud
         m.submodules.cs = self.cs
 

@@ -11,7 +11,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == 0
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == (1 << 11) - 1
             await sim.tick()
@@ -30,7 +32,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -39,7 +43,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b010
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -48,7 +54,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -57,7 +65,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 1
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -76,7 +86,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -85,7 +97,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b010
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -94,7 +108,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data1
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -103,7 +119,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr2
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data2
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -112,7 +130,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr2
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data2
-            assert sim.get(port.ctrl.o) == 0b010
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -121,7 +141,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr2
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data2
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -130,7 +152,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr2
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == data2
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 1
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -145,7 +169,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == 0
             assert sim.get(port.data.oe) == (1 << 16) - 1
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b111
+            assert sim.get(port.reset.o) == 1
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -163,7 +189,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b001
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 0
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -172,7 +200,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == 0
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -191,7 +221,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr + 2
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b001
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 0
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -200,7 +232,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -211,7 +245,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == addr
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b001
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 0
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
@@ -220,7 +256,9 @@ class DDSChecker:
             assert sim.get(port.addr.o) == 0
             assert sim.get(port.data.oe) == 0
             assert sim.get(port.data.o) == 0
-            assert sim.get(port.ctrl.o) == 0b011
+            assert sim.get(port.reset.o) == 0
+            assert sim.get(port.rdb.o) == 1
+            assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()

@@ -129,7 +129,9 @@ class DDSController(Elaboratable):
                      ddsio.data.oe.eq(dds_data_oe),
                      ddsio.data.o.eq(dds_data_out),
                      dds_data_in.eq(ddsio.data.i),
-                     ddsio.ctrl.o.eq(Cat(~dds_wr, ~dds_rd, dds_reset)),
+                     ddsio.wrb.o.eq(~dds_wr),
+                     ddsio.rdb.o.eq(~dds_rd),
+                     ddsio.reset.o.eq(dds_reset),
                      ddsio.fud.o.eq(dds_fud),
                      ddsio.cs.o.eq(~dds_cs)]
 
