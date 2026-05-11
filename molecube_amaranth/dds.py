@@ -240,11 +240,11 @@ class DDSController(Elaboratable):
 
                 with m.Case(FSMState.RD_ASETUP1):
                     # Setup address and read enable
-                    m.d.sync += [dds_next_data.eq(dds_data_in),
-                                 dds_addr.eq(dds_next_addr)]
                     m.d.sync += [fsm_state.eq(FSMState.RD_DELAY1),
                                  hold_cnt.eq(self.csr.dds_read_rdl),
-                                 dds_rd.eq(0)]
+                                 dds_rd.eq(0),
+                                 dds_next_data.eq(dds_data_in),
+                                 dds_addr.eq(dds_next_addr)]
                 with m.Case(FSMState.RD_DELAY1):
                     m.d.sync += [fsm_state.eq(FSMState.RD_ASETUP2),
                                  hold_cnt.eq(self.csr.dds_read_asu),
