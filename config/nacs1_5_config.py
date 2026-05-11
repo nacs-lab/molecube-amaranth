@@ -2,6 +2,7 @@
 
 from molecube_amaranth.config import Config
 from molecube_amaranth.io import sma_pin, ttl_bd_pin
+import dataclasses
 
 ttl_pins = []
 for idx in range(28):
@@ -25,3 +26,4 @@ for idx in range(28):
 ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24)]
 
 config = Config(TTLIN=' '.join(ttlin_pins), TTLOUT=' '.join(ttl_pins))
+config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0)
