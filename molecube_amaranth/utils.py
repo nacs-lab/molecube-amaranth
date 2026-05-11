@@ -48,6 +48,7 @@ class _XValueGenerator(Elaboratable):
 
         return Instance(
             '_XVALUE_GENERATOR',
+            a_KEEP_HIERARCHY="true", # Try to prevent decloning of module
             p_VALUE_WIDTH=width,
             o_value=value,
         )
