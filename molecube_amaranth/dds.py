@@ -207,21 +207,29 @@ class DDSController(Elaboratable):
                                  hold_cnt.eq(self.csr.dds_write_adsu),
                                  dds_addr.eq(dds_next_addr),
                                  dds_data_out.eq(dds_next_data)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.WR_ADSETUP2):
                     # Assert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ENABLE2),
                                  hold_cnt.eq(self.csr.dds_write_wrlow),
                                  dds_wr.eq(1)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.WR_ENABLE2):
                     # Deassert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_FUDWAIT),
                                  hold_cnt.eq(self.csr.dds_write_fuddl),
                                  dds_wr.eq(0)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.WR_FUDWAIT):
                     # Assert IO update
                     m.d.sync += [fsm_state.eq(FSMState.WR_FUDHOLD),
                                  hold_cnt.eq(self.csr.dds_write_fudhd),
                                  dds_fud.eq(1)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.WR_FUDHOLD):
                     # Deassert IO update
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
@@ -230,6 +238,8 @@ class DDSController(Elaboratable):
                                  dds_fud.eq(0),
                                  dds_addr.eq(0),
                                  dds_data_out.eq(0)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
 
                 with m.Case(FSMState.RESET):
                     # Done reset
@@ -237,6 +247,8 @@ class DDSController(Elaboratable):
                                  hold_cnt.eq(0),
                                  dds_cs.eq(0),
                                  dds_reset.eq(0)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
 
                 with m.Case(FSMState.RD_ASETUP1):
                     # Setup address and read enable
@@ -245,10 +257,12 @@ class DDSController(Elaboratable):
                                  dds_rd.eq(0),
                                  dds_next_data.eq(dds_data_in),
                                  dds_addr.eq(dds_next_addr)]
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.RD_DELAY1):
                     m.d.sync += [fsm_state.eq(FSMState.RD_ASETUP2),
                                  hold_cnt.eq(self.csr.dds_read_asu),
                                  dds_rd.eq(1)]
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.RD_ASETUP2):
                     m.d.sync += [fsm_state.eq(FSMState.RD_FINISH),
                                  hold_cnt.eq(self.csr.dds_read_rdhoz),
@@ -256,11 +270,15 @@ class DDSController(Elaboratable):
                                  dds_addr.eq(0),
                                  write_result.eq(1),
                                  final_result.eq(Cat(dds_data_in, dds_next_data))]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.RD_FINISH):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  hold_cnt.eq(0),
                                  dds_cs.eq(0),
                                  dds_data_oe.eq(1)]
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
 
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)
