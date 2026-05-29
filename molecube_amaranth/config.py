@@ -13,6 +13,7 @@ MINOR_VERSION = 4
 class Config:
     TTLIN: str = ''
     TTLOUT: str = ' '.join(io.ttl_bd_pin(fmc, idx) for fmc in range(2) for idx in range(28))
+    TTLIO: str = ''
     CLOCKOUT: str = io.sma_pin(1, 0)
 
     SPI_MISO: str = ''

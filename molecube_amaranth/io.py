@@ -76,6 +76,14 @@ def get_ttlout_ports(plat, pins):
         [Resource("TTL_OUT", 0, ttlout, Attrs(IOSTANDARD="LVCMOS33", DRIVE="4"))])
     return plat.request("TTL_OUT", 0, dir="-")
 
+def get_ttlio_ports(plat, pins):
+    ttlio = Pins(pins, dir="io")
+    if plat is None:
+        return _sim_port(ttlio)
+    plat.add_resources(
+        [Resource("TTL_IO", 0, ttlio, Attrs(IOSTANDARD="LVCMOS33", DRIVE="4"))])
+    return plat.request("TTL_IO", 0, dir="-")
+
 def get_clockout_ports(plat, pin):
     clkout = Pins(pin, dir="o")
     if plat is None:
@@ -174,9 +182,11 @@ class PulseIO(Elaboratable):
                    clockout=get_clockout_ports(plat, config.CLOCKOUT),
                    spi=get_spi(plat, miso=config.SPI_MISO, mosi=config.SPI_MOSI,
                                sclk=config.SPI_SCLK, cs=config.SPI_CS),
+                   ttlio=get_ttlio_ports(plat, config.TTLIO),
                    iobuf_instance=config.IOBUF_INSTANCE)
 
-    def __init__(self, *, ttlin, ttlout, dds0, dds1, clockout, spi, iobuf_instance=False):
+    def __init__(self, *, ttlin, ttlout, dds0, dds1, clockout, spi, ttlio=None,
+                 iobuf_instance=False):
         self.ttlin_port = ttlin
         self.ttlout_port = ttlout
         self.dds0_port = dds0
@@ -185,6 +195,7 @@ class PulseIO(Elaboratable):
         self.spi_port = spi
 
         self.ttlin = io_buffer("i", ttlin, iobuf_instance)
+        self.ttlio = io_buffer("io", ttlio, iobuf_instance)
         self.ttlout = io.Buffer("o", ttlout)
         self.dds0 = DDSBuff(dds0, iobuf_instance)
         self.dds1 = DDSBuff(dds1, iobuf_instance)
@@ -198,6 +209,7 @@ class PulseIO(Elaboratable):
         m = Module()
 
         m.submodules.ttlin = self.ttlin
+        m.submodules.ttlio = self.ttlio
         m.submodules.ttlout = self.ttlout
         m.submodules.dds0 = self.dds0
         m.submodules.dds1 = self.dds1

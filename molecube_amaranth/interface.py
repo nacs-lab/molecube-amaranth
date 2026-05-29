@@ -41,14 +41,15 @@ class ControlInterface(Elaboratable):
         csr = self.csr_regs
 
         for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
-                         'dds_timing1', 'dds_timing2', 'loopback']:
+                         'dds_timing1', 'dds_timing2', 'loopback',
+                         'ttl_io_out', 'ttl_io_oe']:
             real_reg = getattr(csr, reg_name)
             rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             _, wr_reg = reg_chain(m, output=real_reg, levels=2)
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
-        for reg_name in ['ttl_out', 'ttl_in', 'timing_status',
+        for reg_name in ['ttl_out', 'ttl_in', 'ttl_io_in', 'timing_status',
                          'clockout_div', 'dbg_result_count']:
             real_reg = getattr(csr, reg_name)
             rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
@@ -131,6 +132,10 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_ttl_lo(7), data, strb)
                 with m.Case(0x1e):
                     axi_write_reg(m, wr_shadow.loopback, data, strb)
+                with m.Case(0x49):
+                    axi_write_reg(m, wr_shadow.ttl_io_out, data, strb)
+                with m.Case(0x4a):
+                    axi_write_reg(m, wr_shadow.ttl_io_oe, data, strb)
 
                 with m.Case(0x50):
                     axi_write_reg(m, Cat(wr_shadow.dds_timing1,
@@ -249,6 +254,9 @@ class ControlInterface(Elaboratable):
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
                 0x47: rd_shadow.ttl_in,
+                0x48: rd_shadow.ttl_io_in,
+                0x49: rd_shadow.ttl_io_out,
+                0x4a: rd_shadow.ttl_io_oe,
 
                 0x50: rd_shadow.dds_timing1 | C(0, self.data_width),
                 0x51: rd_shadow.dds_timing2 | C(0, self.data_width),
