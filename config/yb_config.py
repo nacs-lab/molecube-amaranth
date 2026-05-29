@@ -10,12 +10,14 @@ for bank in range(2):
         if idx != 24:
             ttl_pins.append(ttl_bd_pin(0 if bank == 1 else 1, idx))
         elif bank == 0:
-            ttl_pins.append(sma_pin(1, 3))
+            ttl_pins.append(sma_pin(1, 5))
         else:
-            ttl_pins.append(sma_pin(1, 2))
+            ttl_pins.append(sma_pin(1, 4))
 
-ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(0, 4), sma_pin(0, 0)]
+ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(0, 1), sma_pin(1, 1)]
 
 config = Config(TTLIN=' '.join(ttlin_pins), TTLOUT=' '.join(ttl_pins))
-config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0)
+config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0,
+                                TTLIO=' '.join([sma_pin(0, 2), sma_pin(1, 2),
+                                                sma_pin(0, 3), sma_pin(1, 3)]))
 config100_bufinst = dataclasses.replace(config100, IOBUF_INSTANCE=True)
