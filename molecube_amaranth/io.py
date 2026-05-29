@@ -121,7 +121,7 @@ def get_spi(plat, *, miso, mosi, sclk, cs):
     return plat.request("SPI", 0, dir="-")
 
 def io_buffer(dir, port, iobuf_instance):
-    if not iobuf_instance:
+    if not iobuf_instance or len(port) == 0:
         return io.Buffer(dir, port)
     from amaranth.hdl import IOBufferInstance
     if dir == "i":
