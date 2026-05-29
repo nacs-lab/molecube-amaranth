@@ -162,6 +162,9 @@ class InstRunner(Elaboratable):
         trig_chn = Signal(8)
         trig_ttl = self.pulseio.ttlin.i.bit_select(trig_chn, 1)
         m.d.sync += self.csr.ttl_in.eq(self.pulseio.ttlin.i)
+        m.d.sync += [self.csr.ttl_io_in.eq(self.pulseio.ttlio.i),
+                     self.pulseio.ttlio.o.eq(self.csr.ttl_io_out),
+                     self.pulseio.ttlio.oe.eq(self.csr.ttl_io_oe)]
 
         # Status
         underflow = Signal(1)
