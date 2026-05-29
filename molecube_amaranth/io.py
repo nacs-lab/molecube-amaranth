@@ -112,10 +112,22 @@ def get_spi(plat, *, miso, mosi, sclk, cs):
                   Attrs(IOSTANDARD="LVCMOS33"))])
     return plat.request("SPI", 0, dir="-")
 
+def io_buffer(dir, port, iobuf_instance):
+    if not iobuf_instance:
+        return io.Buffer(dir, port)
+    from amaranth.hdl import IOBufferInstance
+    if dir == "i":
+        return IOBufferInstance(port.io, i=Signal(len(port)))
+    elif dir == "io":
+        return IOBufferInstance(port.io, i=Signal(len(port)), o=Signal(len(port)),
+                                oe=Signal())
+    else:
+        raise TypeError(f"Unsupported buffer direction: {io}")
+
 class DDSBuff(Elaboratable):
-    def __init__(self, ddsport):
+    def __init__(self, ddsport, iobuf_instance=False):
         self.addr = io.Buffer("o", ddsport.addr)
-        self.data = io.Buffer("io", ddsport.data)
+        self.data = io_buffer("io", ddsport.data, iobuf_instance)
         self.wrb = io.Buffer("o", ddsport.wrb)
         self.rdb = io.Buffer("o", ddsport.rdb)
         self.reset = io.Buffer("o", ddsport.reset)
@@ -161,9 +173,10 @@ class PulseIO(Elaboratable):
                    dds1=get_dds_ports(plat, 1),
                    clockout=get_clockout_ports(plat, config.CLOCKOUT),
                    spi=get_spi(plat, miso=config.SPI_MISO, mosi=config.SPI_MOSI,
-                               sclk=config.SPI_SCLK, cs=config.SPI_CS))
+                               sclk=config.SPI_SCLK, cs=config.SPI_CS),
+                   iobuf_instance=config.IOBUF_INSTANCE)
 
-    def __init__(self, *, ttlin, ttlout, dds0, dds1, clockout, spi):
+    def __init__(self, *, ttlin, ttlout, dds0, dds1, clockout, spi, iobuf_instance=False):
         self.ttlin_port = ttlin
         self.ttlout_port = ttlout
         self.dds0_port = dds0
@@ -171,10 +184,10 @@ class PulseIO(Elaboratable):
         self.clockout_port = clockout
         self.spi_port = spi
 
-        self.ttlin = io.Buffer("i", ttlin)
+        self.ttlin = io_buffer("i", ttlin, iobuf_instance)
         self.ttlout = io.Buffer("o", ttlout)
-        self.dds0 = DDSBuff(dds0)
-        self.dds1 = DDSBuff(dds1)
+        self.dds0 = DDSBuff(dds0, iobuf_instance)
+        self.dds1 = DDSBuff(dds1, iobuf_instance)
         self.clockout = io.Buffer("o", clockout)
         if spi is None:
             self.spi = None

@@ -22,6 +22,7 @@ class Config:
 
     CLOCK_HZ: float = 200e6
     CLOCK_SHIFT: int = 1
+    IOBUF_INSTANCE: bool = False
 
     # These numbers are in unit of half cycle, i.e. nominally 5ns
     DDS_WRITE_ADSU_2: int = 8 # Address/Data SetUp cycles

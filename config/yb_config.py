@@ -18,3 +18,4 @@ ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(0, 4), sma_pin(0, 0)
 
 config = Config(TTLIN=' '.join(ttlin_pins), TTLOUT=' '.join(ttl_pins))
 config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0)
+config100_bufinst = dataclasses.replace(config100, IOBUF_INSTANCE=True)
