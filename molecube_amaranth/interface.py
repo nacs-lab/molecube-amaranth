@@ -48,7 +48,8 @@ class ControlInterface(Elaboratable):
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
-        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count']:
+        for reg_name in ['ttl_out', 'ttl_in', 'timing_status',
+                         'clockout_div', 'dbg_result_count']:
             real_reg = getattr(csr, reg_name)
             rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             setattr(rd_shadow, reg_name, rd_reg)
@@ -247,6 +248,7 @@ class ControlInterface(Elaboratable):
                 0x44: ttl_out_reg(5),
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
+                0x47: rd_shadow.ttl_in,
 
                 0x50: rd_shadow.dds_timing1 | C(0, self.data_width),
                 0x51: rd_shadow.dds_timing2 | C(0, self.data_width),
