@@ -73,6 +73,22 @@ def oring_combiner(m, args, runs):
         res = res | Mux(runs[i], Value.cast(v), 0)
     return View(shape, res)
 
+Concat = type(Cat(Signal(), Signal()))
+Slice = type(Signal()[:])
+
+def get_init(obj):
+    obj = Value.cast(obj)
+    if type(obj) is Const:
+        return obj
+    elif type(obj) is Signal:
+        return Const(obj.init, len(obj))
+    elif type(obj) is Concat:
+        return Cat(get_init(part) for part in obj.parts)
+    elif type(obj) is Slice:
+        return get_init(obj.value)[obj.start:obj.stop]
+    else:
+        raise TypeError(f"Cannot get init value for {obj!r}")
+
 class RegChain(Elaboratable):
     def __init__(self, output, input, levels):
         self.input = input
@@ -87,7 +103,7 @@ class RegChain(Elaboratable):
         else:
             src = self.input
             for _ in range(self.levels - 1):
-                tgt = Signal.like(src)
+                tgt = Signal.like(src, init=get_init(src))
                 m.d.sync += tgt.eq(src)
                 src = tgt
             m.d.sync += self.output.eq(src)
@@ -105,6 +121,6 @@ def reg_chain(m, *, input=None, levels, output=None):
     if output is None:
         output = Signal.like(input)
     elif input is None:
-        input = Signal.like(output)
+        input = Signal.like(output, init=get_init(output))
     m.submodules += RegChain(output, input, levels)
     return output, input

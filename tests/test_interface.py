@@ -10,6 +10,7 @@ from transactron.lib.adapters import AdapterTrans
 from amaranth_axi.axibus import AXI4
 from amaranth_axi.axitools import AXIMasterWriteIFace, AXIMasterReadIFace
 
+from molecube_amaranth.utils import get_init
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION, Config
 from molecube_amaranth.fifo import Fifos
@@ -186,6 +187,7 @@ class TestInterface(TestCaseWithSimulator):
                 assert sim.get(iface.csr.loopback) == 0
 
                 dds_timing1 = sim.get(iface.csr.dds_timing1)
+                assert dds_timing1 != 0
                 assert sim.get(iface.csr.dds_write_adsu) == dds_timing1 & 0x3f
                 assert sim.get(iface.csr.dds_write_wrlow) == (dds_timing1 >> 6) & 0x3f
                 assert sim.get(iface.csr.dds_write_adhd) == (dds_timing1 >> 12) & 0x3f
@@ -193,6 +195,7 @@ class TestInterface(TestCaseWithSimulator):
                 assert sim.get(iface.csr.dds_write_fudhd) == (dds_timing1 >> 24) & 0x3f
 
                 dds_timing2 = sim.get(iface.csr.dds_timing2)
+                assert dds_timing2 != 0
                 assert sim.get(iface.csr.dds_read_asu) == dds_timing2 & 0x3f
                 assert sim.get(iface.csr.dds_read_rdl) == (dds_timing2 >> 6) & 0x3f
                 assert sim.get(iface.csr.dds_read_rdhoz) == (dds_timing2 >> 12) & 0x3f
@@ -266,7 +269,7 @@ class TestInterface(TestCaseWithSimulator):
         vals = {}
         for idx, reg in iface.read_write_regs.items():
             masks[idx] = (1 << len(reg)) - 1
-            vals[idx] = 0
+            vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
             for _ in range(10):
@@ -299,7 +302,7 @@ class TestInterface(TestCaseWithSimulator):
         vals = {}
         for idx, reg in iface.read_write_regs.items():
             masks[idx] = (1 << len(reg)) - 1
-            vals[idx] = 0
+            vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 
         ncycles = 2000
