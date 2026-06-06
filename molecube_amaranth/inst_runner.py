@@ -2,7 +2,7 @@
 
 from amaranth import *
 from amaranth.lib import enum
-from amaranth.lib.data import ArrayLayout, Field, FlexibleLayout, View, StructLayout
+from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 
 from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
@@ -11,6 +11,7 @@ from transactron.lib import BasicFifo
 from .clockout import ClockOutController
 from .spi import SPIController
 from .dds import DDSController, SET_ARG as DDS_SET_ARG
+from .ttlout import TTLOutController
 from .utils import assign_xvalue, xvalue
 
 class DDSOpCode(enum.Enum, shape=4):
@@ -137,22 +138,8 @@ class InstRunner(Elaboratable):
         m.submodules.dds1 = dds1 = DDSController(self.pulseio.dds1,
                                                  self.fifos.result_fifo,
                                                  self.csr)
-
-        if self.clock_shift == 0:
-            next_ttlout = Signal.like(self.csr.ttl_out)
-            ttl_banks = View(ArrayLayout(unsigned(32), 8), next_ttlout)
-            m.d.comb += self.pulseio.ttlout.oe.eq(1)
-            m.d.sync += [self.csr.ttl_out.eq(next_ttlout),
-                         self.pulseio.ttlout.o.eq((next_ttlout | self.csr.ttl_hi_mask) & ~self.csr.ttl_lo_mask)]
-        else:
-            ttlout = self.csr.ttl_out
-            ttl_hi_mask = Signal.like(self.csr.ttl_hi_mask)
-            ttl_lo_mask = Signal.like(self.csr.ttl_lo_mask)
-            ttl_banks = View(ArrayLayout(unsigned(32), 8), ttlout)
-            m.d.comb += [self.pulseio.ttlout.oe.eq(1),
-                         self.pulseio.ttlout.o.eq((ttlout | ttl_hi_mask) & ~ttl_lo_mask)]
-            m.d.sync += [ttl_hi_mask.eq(self.csr.ttl_hi_mask),
-                         ttl_lo_mask.eq(self.csr.ttl_lo_mask)]
+        m.submodules.ttlout = ttlout = TTLOutController(self.pulseio.ttlout, self.csr,
+                                                        delay=1 if self.clock_shift == 0 else 0)
 
         # Run state
         state = Signal(RunState, init=RunState.FETCH)
@@ -351,7 +338,8 @@ class InstRunner(Elaboratable):
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
                             self.csr.dbg_ttl_count.count(m)
-                            m.d.sync += ttl_banks[new_inst.ttl.bank].eq(new_inst.ttl.value)
+                            ttlout.set_bank_inst(m, bank=new_inst.ttl.bank,
+                                                 value=new_inst.ttl.value)
                         with m.If(new_inst.timer >> 1): # timer > 1
                             m.d.sync += state.eq(RunState.EXECUTE)
                         with m.Elif(new_inst.op == InstOpCode.WAIT):
@@ -375,7 +363,8 @@ class InstRunner(Elaboratable):
                         if self.clock_shift != 0:
                             with Transaction().body(m):
                                 self.csr.dbg_ttl_count.count(m)
-                            m.d.sync += ttl_banks[exe_inst.ttl.bank].eq(exe_inst.ttl.value)
+                                ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
+                                                     value=exe_inst.ttl.value)
                     with m.Case(InstOpCode.DDS):
                         with Transaction().body(m):
                             self.csr.dbg_dds_count.count(m)
