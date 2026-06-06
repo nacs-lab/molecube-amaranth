@@ -6,6 +6,7 @@ from amaranth.lib.wiring import In, Out
 from amaranth.lib.cdc import ResetSynchronizer
 from amaranth_zynq.ps7 import PsZynq
 
+from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner
@@ -40,7 +41,9 @@ class TopLevel(Elaboratable):
                                                                 valid_width=9)
 
         m.submodules.pulseio = pulseio = PulseIO.from_config(plat, self.config)
+        m.submodules.ioctrl = ioctrl = IOController(pulseio, regs, fifos,
+                                                    clock_shift=self.config.CLOCK_SHIFT)
         m.submodules.inst_runner = inst_runner = InstRunner(
-            pulseio, regs, fifos, clock_shift=self.config.CLOCK_SHIFT)
+            pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
 
         return m

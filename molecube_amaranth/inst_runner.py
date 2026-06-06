@@ -8,10 +8,7 @@ from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
 from transactron.lib import BasicFifo
 
-from .clockout import ClockOutController
-from .spi import SPIController
-from .dds import DDSController, SET_ARG as DDS_SET_ARG
-from .ttlout import TTLOutController
+from .dds import SET_ARG as DDS_SET_ARG
 from .utils import assign_xvalue, xvalue
 
 class DDSOpCode(enum.Enum, shape=4):
@@ -118,28 +115,17 @@ class RunState(enum.Enum):
     TRIG_ARMED = 4
 
 class InstRunner(Elaboratable):
-    def __init__(self, pulseio, csr, fifos, *, clock_shift=1):
+    def __init__(self, pulseio, csr, fifos, ioctrl, *, clock_shift=1):
         self.pulseio = pulseio
         self.csr = csr
         self.fifos = fifos
         self.clock_shift = clock_shift
+        self.ioctrl = ioctrl
 
     def elaborate(self, plat):
         m = TModule()
 
-        # I/O drivers
-        m.submodules.clockout = clockout = ClockOutController(self.pulseio.clockout,
-                                                              div_width=8 + self.clock_shift)
-        m.submodules.spi = spi = SPIController(self.pulseio.spi, self.fifos.result_fifo,
-                                               div_width=8 + self.clock_shift)
-        m.submodules.dds0 = dds0 = DDSController(self.pulseio.dds0,
-                                                 self.fifos.result_fifo,
-                                                 self.csr)
-        m.submodules.dds1 = dds1 = DDSController(self.pulseio.dds1,
-                                                 self.fifos.result_fifo,
-                                                 self.csr)
-        m.submodules.ttlout = ttlout = TTLOutController(self.pulseio.ttlout, self.csr,
-                                                        delay=1 if self.clock_shift == 0 else 0)
+        ioctrl = self.ioctrl
 
         # Run state
         state = Signal(RunState, init=RunState.FETCH)
@@ -201,38 +187,38 @@ class InstRunner(Elaboratable):
                     m.d.av_comb += getattr(dds_set_arg, k).eq(v)
             with m.Switch(ddsarg.opcode):
                 with m.Case(DDSOpCode.SET_FREQ):
-                    _set_dds_arg(dds0.set_freq(id=dds_id, freq=ddsarg.data))
+                    _set_dds_arg(ioctrl.dds0.set_freq(id=dds_id, freq=ddsarg.data))
                 with m.Case(DDSOpCode.SET_AMP_PHASE):
-                    _set_dds_arg(dds0.set_amp_phase(id=dds_id,
-                                                    amp=ddsarg.data[:16],
-                                                    phase=ddsarg.data[16:]))
+                    _set_dds_arg(ioctrl.dds0.set_amp_phase(id=dds_id,
+                                                           amp=ddsarg.data[:16],
+                                                           phase=ddsarg.data[16:]))
                 with m.Case(DDSOpCode.SET_TWO_BYTES):
-                    _set_dds_arg(dds0.set_two_bytes(id=dds_id,
-                                                    addr=ddsarg.addr,
-                                                    addr2=xvalue(m, 7),
-                                                    data=ddsarg.data[:16],
-                                                    data2=xvalue(m, 16)))
+                    _set_dds_arg(ioctrl.dds0.set_two_bytes(id=dds_id,
+                                                           addr=ddsarg.addr,
+                                                           addr2=xvalue(m, 7),
+                                                           data=ddsarg.data[:16],
+                                                           data2=xvalue(m, 16)))
                 with m.Case(DDSOpCode.GET_TWO_BYTES):
-                    _set_dds_arg(dds0.get_two_bytes(id=dds_id,
-                                                    addr=ddsarg.addr,
-                                                    addr2=xvalue(m, 7),
-                                                    data1=ddsarg.data[:16],
-                                                    data2=ddsarg.data[16:]))
+                    _set_dds_arg(ioctrl.dds0.get_two_bytes(id=dds_id,
+                                                           addr=ddsarg.addr,
+                                                           addr2=xvalue(m, 7),
+                                                           data1=ddsarg.data[:16],
+                                                           data2=ddsarg.data[16:]))
                 with m.Case(DDSOpCode.RESET):
-                    _set_dds_arg(dds0.reset(id=dds_id,
-                                            addr1=ddsarg.addr,
-                                            addr2=xvalue(m, 7),
-                                            data1=ddsarg.data[:16],
-                                            data2=xvalue(m, 16)))
+                    _set_dds_arg(ioctrl.dds0.reset(id=dds_id,
+                                                   addr1=ddsarg.addr,
+                                                   addr2=xvalue(m, 7),
+                                                   data1=ddsarg.data[:16],
+                                                   data2=xvalue(m, 16)))
                 with m.Case(DDSOpCode.SET_FOUR_BYTES):
-                    _set_dds_arg(dds0.set_four_bytes(id=dds_id,
-                                                     addr=ddsarg.addr,
-                                                     data=ddsarg.data))
+                    _set_dds_arg(ioctrl.dds0.set_four_bytes(id=dds_id,
+                                                            addr=ddsarg.addr,
+                                                            data=ddsarg.data))
                 with m.Case(DDSOpCode.GET_FOUR_BYTES):
-                    _set_dds_arg(dds0.get_four_bytes(id=dds_id,
-                                                     addr=ddsarg.addr,
-                                                     data1=ddsarg.data[:16],
-                                                     data2=xvalue(m, 16)))
+                    _set_dds_arg(ioctrl.dds0.get_four_bytes(id=dds_id,
+                                                            addr=ddsarg.addr,
+                                                            data1=ddsarg.data[:16],
+                                                            data2=xvalue(m, 16)))
                 with m.Default():
                     assign_xvalue(m, dds_set_arg, domain='av_comb')
 
@@ -338,8 +324,8 @@ class InstRunner(Elaboratable):
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
                             self.csr.dbg_ttl_count.count(m)
-                            ttlout.set_bank_inst(m, bank=new_inst.ttl.bank,
-                                                 value=new_inst.ttl.value)
+                            ioctrl.ttlout.set_bank_inst(m, bank=new_inst.ttl.bank,
+                                                        value=new_inst.ttl.value)
                         with m.If(new_inst.timer >> 1): # timer > 1
                             m.d.sync += state.eq(RunState.EXECUTE)
                         with m.Elif(new_inst.op == InstOpCode.WAIT):
@@ -363,15 +349,15 @@ class InstRunner(Elaboratable):
                         if self.clock_shift != 0:
                             with Transaction().body(m):
                                 self.csr.dbg_ttl_count.count(m)
-                                ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
-                                                     value=exe_inst.ttl.value)
+                                ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
+                                                            value=exe_inst.ttl.value)
                     with m.Case(InstOpCode.DDS):
                         with Transaction().body(m):
                             self.csr.dbg_dds_count.count(m)
                             with m.If(exe_inst.dds.is_dds1):
-                                dds1.set(m, exe_inst.dds.arg)
+                                ioctrl.dds1.set(m, exe_inst.dds.arg)
                             with m.Else():
-                                dds0.set(m, exe_inst.dds.arg)
+                                ioctrl.dds0.set(m, exe_inst.dds.arg)
                     with m.Case(InstOpCode.WAIT):
                         with Transaction().body(m):
                             self.csr.dbg_wait_count.count(m)
@@ -390,18 +376,18 @@ class InstRunner(Elaboratable):
                     with m.Case(InstOpCode.CLOCKOUT):
                         with Transaction().body(m):
                             self.csr.dbg_clock_count.count(m)
-                            clockout.set(m, shift_cycle_m1(exe_inst.clockout))
+                            ioctrl.clockout.set(m, shift_cycle_m1(exe_inst.clockout))
                         m.d.sync += self.csr.clockout_div.eq(exe_inst.clockout)
                     with m.Case(InstOpCode.SPI):
                         with Transaction().body(m):
                             self.csr.dbg_spi_count.count(m)
-                            spi.set(m, data=exe_inst.spi.data << (32 - 18),
-                                    div=shift_cycle_m1(exe_inst.spi.clk_div),
-                                    nbits_minus_1=17,
-                                    result=exe_inst.spi.save_result,
-                                    id=exe_inst.spi.id,
-                                    clk_pha=exe_inst.spi.clk_pha,
-                                    clk_pol=exe_inst.spi.clk_pol)
+                            ioctrl.spi.set(m, data=exe_inst.spi.data << (32 - 18),
+                                           div=shift_cycle_m1(exe_inst.spi.clk_div),
+                                           nbits_minus_1=17,
+                                           result=exe_inst.spi.save_result,
+                                           id=exe_inst.spi.id,
+                                           clk_pha=exe_inst.spi.clk_pha,
+                                           clk_pol=exe_inst.spi.clk_pol)
                 with m.If(wait_end):
                     m.d.sync += state.eq(RunState.FETCH)
 
@@ -427,7 +413,7 @@ class InstRunner(Elaboratable):
                                  trigger_timeout.eq(1)]
 
         with Transaction().body(m, ready=pulse_init):
-            clockout.set(m, clockout.OFF)
+            ioctrl.clockout.set(m, ioctrl.clockout.OFF)
             self.csr.dbg_inst_word_count.clear(m)
             self.csr.dbg_inst_count.clear(m)
             self.csr.dbg_ttl_count.clear(m)

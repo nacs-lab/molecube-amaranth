@@ -12,6 +12,7 @@ from molecube_amaranth.config import Config
 from molecube_amaranth.io import PulseIO, sma_pin
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner
+from molecube_amaranth.controllers import IOController
 
 from .utils import DDSChecker, SPIChecker, InstBuilder
 
@@ -55,8 +56,10 @@ class InstRunnerTester(Elaboratable):
         m.submodules.pulseio = self.pulseio
         m.submodules.csr = self.csr
         m.submodules.fifos = self.fifos
+        m.submodules.ioctrl = ioctrl = IOController(self.pulseio, self.csr, self.fifos,
+                                                    clock_shift=self.clock_shift)
         m.submodules.inst_runner = inst_runner = InstRunner(self.pulseio,
-                                                            self.csr, self.fifos,
+                                                            self.csr, self.fifos, ioctrl,
                                                             clock_shift=self.clock_shift)
         m.submodules._write_cmd = self._write_cmd
         m.submodules.read_result = self.read_result
