@@ -14,7 +14,9 @@ from molecube_amaranth.utils import get_init
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION, Config
 from molecube_amaranth.fifo import Fifos
+from molecube_amaranth.controllers import IOController
 from molecube_amaranth.interface import ControlInterface
+from molecube_amaranth.io import PulseIO
 
 import pytest
 import random
@@ -28,12 +30,15 @@ def update_data(old_data, data, strb):
     return data
 
 class InterfaceWrapper(Elaboratable):
-    def __init__(self, *, addr_prefix=0, addr_width=9):
-        config = Config()
+    def __init__(self, *, addr_prefix=0, addr_width=9, clock_shift=1):
+        config = Config(CLOCK_SHIFT=clock_shift)
         self.csr = Registers(config)
         self.fifos = Fifos(32)
         axi = AXI4(32, addr_width, 6, len_width=4).create()
-        self.iface = ControlInterface(axi, self.csr, self.fifos,
+        self.pulseio = PulseIO.from_config(None, config)
+        self.ioctrl = IOController(self.pulseio, self.csr, self.fifos,
+                                   clock_shift=config.CLOCK_SHIFT)
+        self.iface = ControlInterface(axi, self.csr, self.fifos, self.ioctrl,
                                       prefix=addr_prefix, valid_width=9)
 
         self.reader = AXIMasterReadIFace(self.iface.axi)
@@ -55,7 +60,6 @@ class InterfaceWrapper(Elaboratable):
 
         self.read_only_regs = {
             0x02: self.csr.timing_status,
-            0x04: self.ttl_out_reg(0),
             0x05: self.csr.clockout_div,
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
@@ -76,20 +80,13 @@ class InterfaceWrapper(Elaboratable):
             0x2e: self.csr.dbg_result_count,
             0x2f: self.csr.dbg_result_generated.value,
             0x30: self.csr.dbg_result_consumed.value,
-
-            0x40: self.ttl_out_reg(1),
-            0x41: self.ttl_out_reg(2),
-            0x42: self.ttl_out_reg(3),
-            0x43: self.ttl_out_reg(4),
-            0x44: self.ttl_out_reg(5),
-            0x45: self.ttl_out_reg(6),
-            0x46: self.ttl_out_reg(7),
         }
 
         self.read_write_regs = {
             0x00: self.ttl_hi_reg(0),
             0x01: self.ttl_lo_reg(0),
             0x03: self.csr.timing_ctrl,
+            0x04: self.ttl_out_reg(0),
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),
             0x12: self.ttl_hi_reg(2),
@@ -105,6 +102,15 @@ class InterfaceWrapper(Elaboratable):
             0x1c: self.ttl_hi_reg(7),
             0x1d: self.ttl_lo_reg(7),
             0x1e: self.csr.loopback,
+
+            0x40: self.ttl_out_reg(1),
+            0x41: self.ttl_out_reg(2),
+            0x42: self.ttl_out_reg(3),
+            0x43: self.ttl_out_reg(4),
+            0x44: self.ttl_out_reg(5),
+            0x45: self.ttl_out_reg(6),
+            0x46: self.ttl_out_reg(7),
+
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
         }
@@ -138,6 +144,8 @@ class InterfaceWrapper(Elaboratable):
 
         m.submodules.reader = self.reader
         m.submodules.writer = self.writer
+        m.submodules.pulseio = self.pulseio
+        m.submodules.ioctrl = self.ioctrl
 
         @def_method(m, self._read_request)
         def _(addr):
@@ -214,8 +222,9 @@ class TestInterface(TestCaseWithSimulator):
             sim.add_testbench(f)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
-    def test_read(self, addr_width):
-        iface = InterfaceWrapper(addr_width=addr_width)
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_read(self, addr_width, clock_shift):
+        iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
 
         async def f(sim):
             for _ in range(10):
@@ -233,8 +242,9 @@ class TestInterface(TestCaseWithSimulator):
             sim.add_testbench(f)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
-    def test_read_throughput(self, addr_width):
-        iface = InterfaceWrapper(addr_width=addr_width)
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_read_throughput(self, addr_width, clock_shift):
+        iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
 
         ncycles = 1000
         vals = {}
@@ -263,8 +273,9 @@ class TestInterface(TestCaseWithSimulator):
             sim.add_testbench(consumer)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
-    def test_write(self, addr_width):
-        iface = InterfaceWrapper(addr_width=addr_width)
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_write(self, addr_width, clock_shift):
+        iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
@@ -275,7 +286,11 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(10):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
-                    strb = random.randint(0, 0xf)
+                    if idx in (0x04, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46):
+                        # TTL out register does not support partial write
+                        strb = 0xf
+                    else:
+                        strb = random.randint(0, 0xf)
                     assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                                strb=strb,
                                                                data=data)) is not None
@@ -283,7 +298,7 @@ class TestInterface(TestCaseWithSimulator):
                     for _ in range(3):
                         await sim.tick()
                     assert (await iface.write_reply.call_try(sim)) is not None
-                    for _ in range(3):
+                    for _ in range(4):
                         await sim.tick()
                     assert sim.get(reg) == data
 
@@ -292,12 +307,15 @@ class TestInterface(TestCaseWithSimulator):
                         await sim.tick()
                     assert (await iface.read_reply.call_try(sim)).data == data
 
+                    assert sim.get(iface.pulseio.ttlout_port.o) == (sim.get(iface.csr.ttl_out) | sim.get(iface.csr.ttl_hi_mask)) & ~sim.get(iface.csr.ttl_lo_mask) & 0xff_ffff_ffff_ffff
+
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
-    def test_write_throughput(self, addr_width):
-        iface = InterfaceWrapper(addr_width=addr_width)
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_write_throughput(self, addr_width, clock_shift):
+        iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
@@ -311,7 +329,11 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(ncycles):
                 idx = random.choice(idxs)
                 data = random.randint(0, 0xffff_ffff)
-                strb = random.randint(0, 0xf)
+                if idx in (0x04, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46):
+                    # TTL out register does not support partial write
+                    strb = 0xf
+                else:
+                    strb = random.randint(0, 0xf)
                 assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                            strb=strb,
                                                            data=data)) is not None

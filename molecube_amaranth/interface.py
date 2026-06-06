@@ -14,7 +14,7 @@ from .csr import Registers
 from .utils import xvalue, reg_chain
 
 class ControlInterface(Elaboratable):
-    def __init__(self, axi, csr_regs, fifos, prefix=0, valid_width=None):
+    def __init__(self, axi, csr_regs, fifos, ioctrl, prefix=0, valid_width=None):
         self.axi = axi
         self.addr_width = len(axi.AWADDR)
         self.data_width = len(axi.WDATA)
@@ -26,6 +26,7 @@ class ControlInterface(Elaboratable):
             valid_width = self.addr_width
         self.prefix = prefix >> valid_width
         self.valid_width = valid_width
+        self.ioctrl = ioctrl
 
     def elaborate(self, plat):
         m = TModule()
@@ -99,6 +100,8 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_ttl_lo(0), data, strb)
                 with m.Case(0x03):
                     axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
+                with m.Case(0x04):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=0, value=data)
 
                 with m.Case(0x10):
                     axi_write_reg(m, wr_ttl_hi(1), data, strb)
@@ -130,6 +133,20 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_ttl_lo(7), data, strb)
                 with m.Case(0x1e):
                     axi_write_reg(m, wr_shadow.loopback, data, strb)
+                with m.Case(0x40):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=1, value=data)
+                with m.Case(0x41):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=2, value=data)
+                with m.Case(0x42):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=3, value=data)
+                with m.Case(0x43):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=4, value=data)
+                with m.Case(0x44):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=5, value=data)
+                with m.Case(0x45):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=6, value=data)
+                with m.Case(0x46):
+                    self.ioctrl.ttlout.set_bank_user(m, bank=7, value=data)
 
                 with m.Case(0x50):
                     axi_write_reg(m, Cat(wr_shadow.dds_timing1,
@@ -296,21 +313,3 @@ class ControlInterface(Elaboratable):
             start_read(m, idx=req.addr >> 2, id=req.id, last=req.last)
 
         return m
-
-if __name__ == '__main__':
-    from amaranth.back import verilog
-    from amaranth_axi.axibus import AXI4
-    from transactron import TransactronContextElaboratable
-    from .config import Config
-    from .csr import Registers
-    from .fifo import Fifos
-
-    config = Config()
-
-    m = TModule()
-    m.submodules.regs = regs = Registers(config)
-    m.submodules.fifos = fifos = Fifos(32)
-    m.submodules.ctrl = ctrl = ControlInterface(AXI4(32, 10, 6, len_width=4).create(),
-                                                regs, fifos)
-    m = TransactronContextElaboratable(m)
-    print(verilog.convert(m, ports=ctrl.axi.all_ports))
