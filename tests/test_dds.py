@@ -98,14 +98,28 @@ class DDSControllerTester(Elaboratable):
 
         return m
 
-async def _check_write_reg1(sim, circ, id, addr1, data1):
-    await DDSChecker.set1(sim, circ.csr, circ.port, id=id, addr1=addr1, data1=data1)
-    await DDSChecker.idle(sim, circ.port)
+    def set_cache(self, id, addr, val):
+        self.cache[id][addr] = val
 
-async def _check_write_reg2(sim, circ, id, addr1, data1, addr2, data2):
-    await DDSChecker.set2(sim, circ.csr, circ.port, id=id, addr1=addr1, data1=data1,
-                          addr2=addr2, data2=data2)
-    await DDSChecker.idle(sim, circ.port)
+    def get_cache(self, id, addr):
+        return self.cache[id][addr]
+
+    async def check_write1(self, sim, id, addr1, data1):
+        await DDSChecker.set1(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1)
+        await DDSChecker.idle(sim, self.port)
+
+    async def check_write2(self, sim, id, addr1, data1, addr2, data2):
+        await DDSChecker.set2(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1,
+                              addr2=addr2, data2=data2)
+        await DDSChecker.idle(sim, self.port)
+
+    async def check_read1(self, sim, id, addr, data):
+        await DDSChecker.get1(sim, self.csr, self.port, id=id, addr=addr, data=data)
+        await DDSChecker.idle(sim, self.port)
+
+    async def check_read2(self, sim, id, addr, data):
+        await DDSChecker.get2(sim, self.csr, self.port, id=id, addr=addr, data=data)
+        await DDSChecker.idle(sim, self.port)
 
 class TestDDS(TestCaseWithSimulator):
     def test_idle(self):
@@ -137,7 +151,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.set_freq.call(sim, id=id, freq=freq)
 
-                await _check_write_reg2(sim, circ, id, 0x2d, freq & 0xffff, 0x2f, freq >> 16)
+                await circ.check_write2(sim, id, 0x2d, freq & 0xffff, 0x2f, freq >> 16)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -163,7 +177,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.set_amp_phase.call(sim, id=id, amp=amp, phase=phase)
 
-                await _check_write_reg2(sim, circ, id, 0x33, amp, 0x31, phase)
+                await circ.check_write2(sim, id, 0x33, amp, 0x31, phase)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -189,7 +203,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.set_two_bytes.call(sim, id=id, addr=addr, data=data)
 
-                await _check_write_reg1(sim, circ, id, addr, data)
+                await circ.check_write1(sim, id, addr, data)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -215,7 +229,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.set_four_bytes.call(sim, id=id, addr=addr, data=data)
 
-                await _check_write_reg2(sim, circ, id, addr, data & 0xffff,
+                await circ.check_write2(sim, id, addr, data & 0xffff,
                                         addr + 2, data >> 16)
 
         with self.run_simulation(circ) as sim:
@@ -256,9 +270,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.get_two_bytes.call(sim, id=id, addr=addr)
 
-                await DDSChecker.get1(sim, circ.csr, circ.port,
-                                      id=id, addr=addr, data=data)
-                await DDSChecker.idle(sim, circ.port)
+                await circ.check_read1(sim, id, addr, data)
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
@@ -292,9 +304,7 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.get_four_bytes.call(sim, id=id, addr=addr)
 
-                await DDSChecker.get2(sim, circ.csr, circ.port,
-                                      id=id, addr=addr, data=data)
-                await DDSChecker.idle(sim, circ.port)
+                await circ.check_read2(sim, id, addr, data)
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
