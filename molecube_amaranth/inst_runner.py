@@ -8,7 +8,7 @@ from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
 from transactron.lib import BasicFifo
 
-from .dds import SET_ARG as DDS_SET_ARG
+from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .utils import assign_xvalue, xvalue
 
 class DDSOpCode(enum.Enum, shape=4):
@@ -186,39 +186,31 @@ class InstRunner(Elaboratable):
                 for (k, v) in d.items():
                     m.d.av_comb += getattr(dds_set_arg, k).eq(v)
             with m.Switch(ddsarg.opcode):
+                dds_req = DDSReq(self.csr)
                 with m.Case(DDSOpCode.SET_FREQ):
-                    _set_dds_arg(ioctrl.dds0.set_freq(id=dds_id, freq=ddsarg.data))
+                    _set_dds_arg(dds_req.set_freq(m, id=dds_id, freq=ddsarg.data))
                 with m.Case(DDSOpCode.SET_AMP_PHASE):
-                    _set_dds_arg(ioctrl.dds0.set_amp_phase(id=dds_id,
-                                                           amp=ddsarg.data[:16],
-                                                           phase=ddsarg.data[16:]))
+                    _set_dds_arg(dds_req.set_amp_phase(m, id=dds_id,
+                                                       amp=ddsarg.data[:16],
+                                                       phase=ddsarg.data[16:]))
                 with m.Case(DDSOpCode.SET_TWO_BYTES):
-                    _set_dds_arg(ioctrl.dds0.set_two_bytes(id=dds_id,
-                                                           addr=ddsarg.addr,
-                                                           addr2=xvalue(m, 7),
-                                                           data=ddsarg.data[:16],
-                                                           data2=xvalue(m, 16)))
+                    _set_dds_arg(dds_req.set_two_bytes(m, id=dds_id,
+                                                       addr=ddsarg.addr,
+                                                       data=ddsarg.data[:16]))
                 with m.Case(DDSOpCode.GET_TWO_BYTES):
-                    _set_dds_arg(ioctrl.dds0.get_two_bytes(id=dds_id,
-                                                           addr=ddsarg.addr,
-                                                           addr2=xvalue(m, 7),
-                                                           data1=ddsarg.data[:16],
-                                                           data2=ddsarg.data[16:]))
+                    _set_dds_arg(dds_req.get_two_bytes(m, id=dds_id, addr=ddsarg.addr,
+                                                       data1=ddsarg.data[:16],
+                                                       data2=ddsarg.data[16:]))
                 with m.Case(DDSOpCode.RESET):
-                    _set_dds_arg(ioctrl.dds0.reset(id=dds_id,
-                                                   addr1=ddsarg.addr,
-                                                   addr2=xvalue(m, 7),
-                                                   data1=ddsarg.data[:16],
-                                                   data2=xvalue(m, 16)))
+                    _set_dds_arg(dds_req.reset(m, id=dds_id, addr1=ddsarg.addr,
+                                               data1=ddsarg.data[:16]))
                 with m.Case(DDSOpCode.SET_FOUR_BYTES):
-                    _set_dds_arg(ioctrl.dds0.set_four_bytes(id=dds_id,
-                                                            addr=ddsarg.addr,
-                                                            data=ddsarg.data))
+                    _set_dds_arg(dds_req.set_four_bytes(m, id=dds_id,
+                                                        addr=ddsarg.addr,
+                                                        data=ddsarg.data))
                 with m.Case(DDSOpCode.GET_FOUR_BYTES):
-                    _set_dds_arg(ioctrl.dds0.get_four_bytes(id=dds_id,
-                                                            addr=ddsarg.addr,
-                                                            data1=ddsarg.data[:16],
-                                                            data2=xvalue(m, 16)))
+                    _set_dds_arg(dds_req.get_four_bytes(m, id=dds_id, addr=ddsarg.addr,
+                                                        data1=ddsarg.data[:16]))
                 with m.Default():
                     assign_xvalue(m, dds_set_arg, domain='av_comb')
 

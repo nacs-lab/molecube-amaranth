@@ -6,7 +6,7 @@ from amaranth.lib.data import StructLayout
 
 from transactron import TModule, Transaction, Method, def_method
 
-from .utils import assign_xvalue, oring_combiner
+from .utils import xvalue, assign_xvalue, oring_combiner
 
 
 class FSMState(enum.Enum):
@@ -39,24 +39,19 @@ SET_ARG = StructLayout(dict(
     data2=16,
 ))
 
-class DDSController(Elaboratable):
-    def __init__(self, ddsio, result_fifo, csr):
-        self.ddsio = ddsio
-        self.result_fifo = result_fifo
+class DDSReq:
+    def __init__(self, csr):
         self.csr = csr
 
-        self.set = Method(i=SET_ARG)
-
-    def write1(self, *, id, addr1, data1, addr2=0, data2=0):
-        # addr2 and data2 are ignored
+    def write1(self, m, *, id, addr1, data1):
         return dict(state=FSMState.WR_ADSETUP2,
                     id=id,
                     hold_cnt=self.csr.dds_write_adsu,
                     read=0, reset=0,
                     addr1=addr1, data1=data1,
-                    addr2=addr2, data2=data2)
+                    addr2=xvalue(m, 7), data2=xvalue(m, 16))
 
-    def write2(self, *, id, addr1, data1, addr2, data2):
+    def write2(self, m, *, id, addr1, data1, addr2, data2):
         return dict(state=FSMState.WR_ADSETUP1,
                     id=id,
                     hold_cnt=self.csr.dds_write_adsu,
@@ -64,42 +59,40 @@ class DDSController(Elaboratable):
                     addr1=addr1, data1=data1,
                     addr2=addr2, data2=data2)
 
-    def set_freq(self, *, id, freq):
-        return self.write2(id=id, addr1=0x2d, data1=freq[:16],
+    def set_freq(self, m, *, id, freq):
+        return self.write2(m, id=id, addr1=0x2d, data1=freq[:16],
                            addr2=0x2f, data2=freq[16:])
 
-    def set_amp_phase(self, *, id, amp, phase):
-        return self.write2(id=id, addr1=0x33, data1=C(0, 16) | amp,
+    def set_amp_phase(self, m, *, id, amp, phase):
+        return self.write2(m, id=id, addr1=0x33, data1=C(0, 16) | amp,
                            addr2=0x31, data2=phase)
 
-    def set_two_bytes(self, *, id, addr, data, addr2=0, data2=0):
-        return self.write1(id=id, addr1=addr, data1=data, addr2=addr2, data2=data2)
+    def set_two_bytes(self, m, *, id, addr, data):
+        return self.write1(m, id=id, addr1=addr, data1=data)
 
-    def set_four_bytes(self, *, id, addr, data, addr_2=None):
+    def set_four_bytes(self, m, *, id, addr, data, addr_2=None):
         if addr_2 is None:
             addr_2 = addr + 2
-        return self.write2(id=id, addr1=addr, data1=data[:16],
+        return self.write2(m, id=id, addr1=addr, data1=data[:16],
                            addr2=addr_2, data2=data[16:])
 
-    def reset(self, *, id, addr1=0, data1=0, addr2=0, data2=0):
-        # addr2 and data2 are ignored
+    def reset(self, m, *, id, addr1=0, data1=0):
         return dict(state=FSMState.RESET,
                     id=id,
                     hold_cnt=self.csr.dds_reset_rshd,
                     read=0, reset=1,
                     addr1=addr1, data1=data1,
-                    addr2=addr2, data2=data2)
+                    addr2=xvalue(m, 7), data2=xvalue(m, 16))
 
-    def get_two_bytes(self, *, id, addr, data1=0, addr2=0, data2=0):
-        # addr2 and data2 are ignored
+    def get_two_bytes(self, m, *, id, addr, data1=0, data2=0):
         return dict(state=FSMState.RD_ASETUP2,
                     id=id,
                     hold_cnt=self.csr.dds_read_asu,
                     read=1, reset=0,
                     addr1=addr, data1=data1,
-                    addr2=addr2, data2=data2)
+                    addr2=xvalue(m, 7), data2=data2)
 
-    def get_four_bytes(self, *, id, addr, addr_2=None, data1=0, data2=0):
+    def get_four_bytes(self, m, *, id, addr, addr_2=None, data1=0):
         if addr_2 is None:
             addr_2 = addr + 2
         return dict(state=FSMState.RD_ASETUP1,
@@ -107,7 +100,15 @@ class DDSController(Elaboratable):
                     hold_cnt=self.csr.dds_read_asu,
                     read=1, reset=0,
                     addr1=addr_2, data1=data1,
-                    addr2=addr, data2=data2)
+                    addr2=addr, data2=xvalue(m, 16))
+
+class DDSController(Elaboratable):
+    def __init__(self, ddsio, result_fifo, csr):
+        self.ddsio = ddsio
+        self.result_fifo = result_fifo
+        self.csr = csr
+
+        self.set = Method(i=SET_ARG)
 
     def elaborate(self, plat):
         m = TModule()

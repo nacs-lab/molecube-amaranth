@@ -9,7 +9,7 @@ from transactron.lib.adapters import AdapterTrans
 
 from molecube_amaranth.config import Config
 from molecube_amaranth.csr import Registers
-from molecube_amaranth.dds import DDSController
+from molecube_amaranth.dds import DDSController, DDSReq
 from molecube_amaranth.io import get_dds_ports, DDSBuff
 from molecube_amaranth.fifo import ResultFifo
 
@@ -66,33 +66,35 @@ class DDSControllerTester(Elaboratable):
         m.submodules.get_two_bytes = self.get_two_bytes
         m.submodules.get_four_bytes = self.get_four_bytes
 
+        dds_req = DDSReq(self.csr)
+
         @def_method(m, self._set_freq)
         def _(id, freq):
-            self.controller.set(m, self.controller.set_freq(id=id, freq=freq))
+            self.controller.set(m, dds_req.set_freq(m, id=id, freq=freq))
 
         @def_method(m, self._set_amp_phase)
         def _(id, amp, phase):
-            self.controller.set(m, self.controller.set_amp_phase(id=id, amp=amp, phase=phase))
+            self.controller.set(m, dds_req.set_amp_phase(m, id=id, amp=amp, phase=phase))
 
         @def_method(m, self._set_two_bytes)
         def _(id, addr, data):
-            self.controller.set(m, self.controller.set_two_bytes(id=id, addr=addr, data=data))
+            self.controller.set(m, dds_req.set_two_bytes(m, id=id, addr=addr, data=data))
 
         @def_method(m, self._set_four_bytes)
         def _(id, addr, data):
-            self.controller.set(m, self.controller.set_four_bytes(id=id, addr=addr, data=data))
+            self.controller.set(m, dds_req.set_four_bytes(m, id=id, addr=addr, data=data))
 
         @def_method(m, self._reset)
         def _(id):
-            self.controller.set(m, self.controller.reset(id=id))
+            self.controller.set(m, dds_req.reset(m, id=id))
 
         @def_method(m, self._get_two_bytes)
         def _(id, addr):
-            self.controller.set(m, self.controller.get_two_bytes(id=id, addr=addr))
+            self.controller.set(m, dds_req.get_two_bytes(m, id=id, addr=addr))
 
         @def_method(m, self._get_four_bytes)
         def _(id, addr):
-            self.controller.set(m, self.controller.get_four_bytes(id=id, addr=addr))
+            self.controller.set(m, dds_req.get_four_bytes(m, id=id, addr=addr))
 
         return m
 
