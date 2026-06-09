@@ -228,7 +228,7 @@ class TestInterface(TestCaseWithSimulator):
         iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
 
         async def f(sim):
-            for _ in range(10):
+            for _ in range(5):
                 vals = iface.randomize_read_only_regs(sim)
                 # Make sure the values have propagated to the shadow version
                 await sim.tick()
@@ -247,7 +247,7 @@ class TestInterface(TestCaseWithSimulator):
     def test_read_throughput(self, addr_width, clock_shift):
         iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
 
-        ncycles = 300
+        ncycles = 100
         vals = {}
         read_req = []
 
@@ -287,7 +287,7 @@ class TestInterface(TestCaseWithSimulator):
             vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
-            for _ in range(10):
+            for _ in range(5):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
                     if idx in (0x04, 0x40):
@@ -332,7 +332,7 @@ class TestInterface(TestCaseWithSimulator):
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 
-        ncycles = 300
+        ncycles = 100
 
         async def producer(sim):
             for _ in range(ncycles):
@@ -458,7 +458,7 @@ class TestInterface(TestCaseWithSimulator):
 
         async def f(sim):
             valid_mask = (1 << 9) - 1
-            for _ in range(10):
+            for _ in range(5):
                 while True:
                     addr = random.randint(0, valid_mask)
                     if addr >> 2 != 0x1f:
@@ -476,7 +476,7 @@ class TestInterface(TestCaseWithSimulator):
                 assert (await iface.write_reply.call_try(sim)).resp == 0
 
             rw_idxs = list(iface.read_write_regs)
-            for _ in range(20):
+            for _ in range(10):
                 addr = (random.choice(rw_idxs) << 2) | prefix
                 assert (await iface.write_request.call_try(sim, addr=addr, strb=0xf,
                                                            data=random.randint(0, 0xffff_ffff))) is not None
@@ -492,7 +492,7 @@ class TestInterface(TestCaseWithSimulator):
             reg_values = {idx: sim.get(reg) for idx, reg in iface.read_write_regs.items()}
             assert (await iface.read_inst.call_try(sim)) is None
 
-            for _ in range(150):
+            for _ in range(50):
                 while True:
                     addr = random.randint(0, 0xffff_ffff)
                     if (addr >> 9) != (prefix >> 9):

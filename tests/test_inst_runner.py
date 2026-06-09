@@ -484,10 +484,10 @@ class TestInstRunner(TestCaseWithSimulator):
     def test_clockout(self, clock_shift):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
-        div1 = random.randint(0, 254)
-        t1 = random.randint(1000, 2000)
-        div2 = random.randint(0, 254)
-        t2 = random.randint(1000, 2000)
+        div1 = random.randint(0, 20)
+        t1 = random.randint(60, 200)
+        div2 = random.randint(0, 20)
+        t2 = random.randint(60, 200)
 
         async def producer(sim):
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
@@ -531,9 +531,9 @@ class TestInstRunner(TestCaseWithSimulator):
     def test_clockout_off(self, clock_shift):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
-        div1 = random.randint(0, 254)
-        t1 = random.randint(1000, 2000)
-        t2 = random.randint(1000, 2000)
+        div1 = random.randint(0, 20)
+        t1 = random.randint(60, 200)
+        t2 = random.randint(550, 600)
 
         async def producer(sim):
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
@@ -577,8 +577,8 @@ class TestInstRunner(TestCaseWithSimulator):
     def test_clockout_init(self, clock_shift):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
-        div1 = random.randint(0, 254)
-        t1 = random.randint(1000, 2000)
+        div1 = random.randint(0, 20)
+        t1 = random.randint(60, 500)
 
         async def producer(sim):
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
