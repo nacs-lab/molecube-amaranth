@@ -1111,7 +1111,7 @@ class TestInstRunner(TestCaseWithSimulator):
         fifo_depth = circ.fifos.cmd_fifo.depth + 2
 
         ttls = [random.randint(0, 0xffff_ffff) for _ in range(fifo_depth * 2)]
-        ts = [random.randint(2, 6) for _ in range(fifo_depth * 2)]
+        ts = [random.randint(1, 2) for _ in range(fifo_depth * 2)]
 
         async def producer(sim):
             for (ttl, t) in zip(ttls, ts):
@@ -1159,7 +1159,7 @@ class TestInstRunner(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
-            circ.add_testbenches(sim)
+            sim.add_testbench(circ.check_ttl, background=True)
 
     @pytest.mark.parametrize("clock_shift", [0, 1])
     def test_dds_set_freq(self, clock_shift):
