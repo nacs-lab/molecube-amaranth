@@ -290,10 +290,12 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(10):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
-                    if idx in (0x04, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46):
+                    if idx in (0x04, 0x40):
                         # TTL out register does not support partial write
+                        write_delay = 6
                         strb = 0xf
                     else:
+                        write_delay = 3
                         strb = random.randint(0, 0xf)
                     assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                                strb=strb,
@@ -302,7 +304,7 @@ class TestInterface(TestCaseWithSimulator):
                     for _ in range(3):
                         await sim.tick()
                     assert (await iface.write_reply.call_try(sim)) is not None
-                    for _ in range(4):
+                    for _ in range(write_delay):
                         await sim.tick()
                     assert sim.get(reg) == data
 
@@ -336,7 +338,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(ncycles):
                 idx = random.choice(idxs)
                 data = random.randint(0, 0xffff_ffff)
-                if idx in (0x04, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46):
+                if idx in (0x04, 0x40):
                     # TTL out register does not support partial write
                     strb = 0xf
                 else:
@@ -352,10 +354,8 @@ class TestInterface(TestCaseWithSimulator):
                 assert (await iface.write_reply.call_try(sim)) is not None
 
             # Make sure the data is propagated to the target from the shadow
-            await sim.tick()
-            await sim.tick()
-            await sim.tick()
-            await sim.tick()
+            for _ in range(10):
+                await sim.tick()
 
             for idx, reg in iface.read_write_regs.items():
                 assert sim.get(reg) == vals[idx]

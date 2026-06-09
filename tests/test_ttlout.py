@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.lib import io
 
-from transactron import TModule
+from transactron import TModule, Method, def_method
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO
 from transactron.lib.adapters import AdapterTrans
 
@@ -24,7 +24,9 @@ class TTLOutControllerTester(Elaboratable):
         self.csr = Registers(config)
         self.ttlout = TTLOutController(self.pulseio.ttlout, self.csr, delay=delay)
 
-        self.set_bank_user = _TestbenchIO(AdapterTrans.create(self.ttlout.set_bank_user))
+        self._set_bank_user = Method(i=[('bank', 3), ('value', 32)])
+
+        self.set_bank_user = _TestbenchIO(AdapterTrans.create(self._set_bank_user))
         self.set_bank_inst = _TestbenchIO(AdapterTrans.create(self.ttlout.set_bank_inst))
 
     def elaborate(self, _):
@@ -33,6 +35,26 @@ class TTLOutControllerTester(Elaboratable):
         m.submodules.pulseio = self.pulseio
         m.submodules.csr = self.csr
         m.submodules.ttlout = self.ttlout
+
+        @def_method(m, self._set_bank_user)
+        def _(bank, value):
+            with m.Switch(bank):
+                with m.Case(0):
+                    self.ttlout.set_bank_user0(m, value)
+                with m.Case(1):
+                    self.ttlout.set_bank_user1(m, value)
+                with m.Case(2):
+                    self.ttlout.set_bank_user2(m, value)
+                with m.Case(3):
+                    self.ttlout.set_bank_user3(m, value)
+                with m.Case(4):
+                    self.ttlout.set_bank_user4(m, value)
+                with m.Case(5):
+                    self.ttlout.set_bank_user5(m, value)
+                with m.Case(6):
+                    self.ttlout.set_bank_user6(m, value)
+                with m.Case(7):
+                    self.ttlout.set_bank_user7(m, value)
 
         m.submodules.set_bank_inst = self.set_bank_inst
         m.submodules.set_bank_user = self.set_bank_user
@@ -99,11 +121,11 @@ class TestTTLOut(TestCaseWithSimulator):
                 value = random.randint(0, 0xffff_ffff)
                 await circ.set_bank_user.call(sim, bank=bank, value=value)
                 checker.set_bank(bank, value)
-                await sim.tick()
-                await sim.tick()
+                for _ in range(4):
+                    checker.tick()
+                    await sim.tick()
                 assert sim.get(circ.csr.ttl_out) == checker.ttl_out_reg
                 assert sim.get(circ.pulseio.ttlout_port.o) == checker.ttl_out_io
-                checker.tick()
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)

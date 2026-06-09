@@ -6,7 +6,7 @@ from amaranth.lib.data import ArrayLayout, View
 from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
-from .utils import assign_xvalue, oring_combiner
+from .utils import assign_xvalue, oring_combiner, reg_chain
 
 class TTLOutController(Elaboratable):
     def __init__(self, ttloutio, csr, *, delay=0):
@@ -14,8 +14,11 @@ class TTLOutController(Elaboratable):
         self.csr = csr
         assert delay in (0, 1)
         self.delay = delay
-        self.set_bank_user = Method(i=[('bank', 3), ('value', 32)])
+
         self.set_bank_inst = Method(i=[('bank', 3), ('value', 32)])
+
+        for bank in range(8):
+            setattr(self, f'set_bank_user{bank}', Method(i=[('value', 32)]))
 
     def elaborate(self, plat):
         m = TModule()
@@ -40,19 +43,32 @@ class TTLOutController(Elaboratable):
         m.d.comb += [self.ttloutio.oe.eq(1),
                      self.ttloutio.o.eq((csr_ttl_out | ttl_hi_mask) & ~ttl_lo_mask)]
 
-        m.submodules.set_pipe = set_pipe = PipelineBuilder()
-        start_set_bank = set_pipe.create_external(i=[('bank', 3), ('value', 32)], o=[])
-        @def_method(m, self.set_bank_user, singlecaller=True)
-        def _(bank, value):
-            start_set_bank(m, bank=bank, value=value)
+        for bank in range(8):
+            meth = getattr(self, f'set_bank_user{bank}')
+            if bank * 32 >= nttls:
+                @def_method(m, meth, singlecaller=True)
+                def _(value):
+                    pass
+                continue
+            ttl_bank_reg = ttl_banks[bank]
 
-        @set_pipe.stage(m)
-        def _():
-            pass
+            ttl_bank_write_en = Signal()
+            ttl_bank_write_data = Signal(32)
 
-        @set_pipe.stage(m)
-        def _(bank, value):
-            m.d.sync += ttl_banks[bank].eq(value)
+            with m.If(ttl_bank_write_en):
+                m.d.sync += ttl_bank_reg.eq(ttl_bank_write_data)
+
+            ttl_bank_write_en_in = Signal()
+            ttl_bank_write_data_in = Signal(32)
+            m.d.sync += ttl_bank_write_en_in.eq(0)
+            assign_xvalue(m, ttl_bank_write_data_in)
+            reg_chain(m, output=Cat(ttl_bank_write_en, ttl_bank_write_data),
+                      input=Cat(ttl_bank_write_en_in, ttl_bank_write_data_in),
+                      levels=2)
+            @def_method(m, meth, singlecaller=True)
+            def _(value):
+                m.d.sync += [ttl_bank_write_en_in.eq(1),
+                             ttl_bank_write_data_in.eq(value)]
 
         @def_method(m, self.set_bank_inst, combiner=oring_combiner, nonexclusive=True)
         def _(bank, value):
