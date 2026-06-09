@@ -20,21 +20,25 @@ class TTLOutController(Elaboratable):
     def elaborate(self, plat):
         m = TModule()
 
-        ttl_hi_mask = Signal.like(self.csr.ttl_hi_mask)
-        ttl_lo_mask = Signal.like(self.csr.ttl_lo_mask)
+        nttls = len(self.ttloutio.o)
+
+        ttl_hi_mask = Signal(nttls)
+        ttl_lo_mask = Signal(nttls)
         m.d.sync += [ttl_hi_mask.eq(self.csr.ttl_hi_mask),
                      ttl_lo_mask.eq(self.csr.ttl_lo_mask)]
 
+        csr_ttl_out = self.csr.ttl_out[:nttls]
+
         if self.delay == 0:
-            ttl_out = self.csr.ttl_out
+            ttl_out = csr_ttl_out
         else:
             assert self.delay == 1
-            ttl_out = Signal.like(self.csr.ttl_out)
-            m.d.sync += self.csr.ttl_out.eq(ttl_out)
+            ttl_out = Signal(nttls)
+            m.d.sync += csr_ttl_out.eq(ttl_out)
 
-        ttl_banks = View(ArrayLayout(unsigned(32), 8), ttl_out)
+        ttl_banks = View(ArrayLayout(unsigned(32), 8), Cat(ttl_out, Signal(256 - nttls)))
         m.d.comb += [self.ttloutio.oe.eq(1),
-                     self.ttloutio.o.eq((self.csr.ttl_out | ttl_hi_mask) & ~ttl_lo_mask)]
+                     self.ttloutio.o.eq((csr_ttl_out | ttl_hi_mask) & ~ttl_lo_mask)]
 
         m.submodules.set_pipe = set_pipe = PipelineBuilder()
         start_set_bank = set_pipe.create_external(i=[('bank', 3), ('value', 32)], o=[])

@@ -80,6 +80,13 @@ class InterfaceWrapper(Elaboratable):
             0x2e: self.csr.dbg_result_count,
             0x2f: self.csr.dbg_result_generated.value,
             0x30: self.csr.dbg_result_consumed.value,
+
+            0x41: self.ttl_out_reg(2),
+            0x42: self.ttl_out_reg(3),
+            0x43: self.ttl_out_reg(4),
+            0x44: self.ttl_out_reg(5),
+            0x45: self.ttl_out_reg(6),
+            0x46: self.ttl_out_reg(7),
         }
 
         self.read_write_regs = {
@@ -104,12 +111,6 @@ class InterfaceWrapper(Elaboratable):
             0x1e: self.csr.loopback,
 
             0x40: self.ttl_out_reg(1),
-            0x41: self.ttl_out_reg(2),
-            0x42: self.ttl_out_reg(3),
-            0x43: self.ttl_out_reg(4),
-            0x44: self.ttl_out_reg(5),
-            0x45: self.ttl_out_reg(6),
-            0x46: self.ttl_out_reg(7),
 
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
@@ -279,7 +280,10 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            masks[idx] = (1 << len(reg)) - 1
+            if idx == 0x40:
+                masks[idx] = (1 << 24) - 1
+            else:
+                masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
@@ -319,7 +323,10 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            masks[idx] = (1 << len(reg)) - 1
+            if idx == 0x40:
+                masks[idx] = (1 << 24) - 1
+            else:
+                masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 

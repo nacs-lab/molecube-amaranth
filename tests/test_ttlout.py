@@ -58,7 +58,7 @@ class TTLChecker:
 
     @property
     def ttl_out_io(self):
-        return ((self.ttl_out_reg | self._real_ttl_hi_mask) & ~self._real_ttl_lo_mask) & ((1 << 56) - 1)
+        return ((self.ttl_out_reg | self._real_ttl_hi_mask) & ~self._real_ttl_lo_mask)
 
     def tick(self):
         self._real_ttl_hi_mask = self.ttl_hi_mask
@@ -67,7 +67,7 @@ class TTLChecker:
 
     def set_bank(self, bank, value):
         mask = ~(0xffff_ffff << (bank * 32))
-        self._ttl_out_reg = (self._ttl_out_reg & mask) | (value << (bank * 32))
+        self._ttl_out_reg = (self._ttl_out_reg & mask) | ((value << (bank * 32)) & ((1 << 56) - 1))
 
 class TestTTLOut(TestCaseWithSimulator):
     @pytest.mark.parametrize("delay", [0, 1])
