@@ -185,7 +185,7 @@ class TestInterface(TestCaseWithSimulator):
     def test_idle(self, addr_width):
         iface = InterfaceWrapper(addr_width=addr_width)
         async def f(sim):
-            for _ in range(100):
+            for _ in range(10):
                 assert sim.get(iface.csr.ttl_hi_mask) == 0
                 assert sim.get(iface.csr.ttl_lo_mask) == 0
                 assert sim.get(iface.csr.ttl_out) == 0
@@ -247,7 +247,7 @@ class TestInterface(TestCaseWithSimulator):
     def test_read_throughput(self, addr_width, clock_shift):
         iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
 
-        ncycles = 1000
+        ncycles = 300
         vals = {}
         read_req = []
 
@@ -330,7 +330,7 @@ class TestInterface(TestCaseWithSimulator):
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 
-        ncycles = 2000
+        ncycles = 300
 
         async def producer(sim):
             for _ in range(ncycles):

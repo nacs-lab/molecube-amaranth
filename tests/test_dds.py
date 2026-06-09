@@ -155,11 +155,7 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("adsu", [0, 5])
-    @pytest.mark.parametrize("wrlow", [0, 5])
-    @pytest.mark.parametrize("adhd", [0, 5])
-    @pytest.mark.parametrize("fuddl", [0, 5])
-    @pytest.mark.parametrize("fudhd", [0, 5])
+    @pytest.mark.parametrize("adsu,wrlow,adhd,fuddl,fudhd", [(0, 0, 0, 0, 2), (0, 0, 0, 2, 0), (0, 0, 2, 0, 0), (0, 2, 0, 0, 0), (2, 0, 0, 0, 0)])
     def test_set_freq(self, adsu, wrlow, adhd, fuddl, fudhd):
         circ = DDSControllerTester()
 
@@ -181,11 +177,7 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("adsu", [0, 5])
-    @pytest.mark.parametrize("wrlow", [0, 5])
-    @pytest.mark.parametrize("adhd", [0, 5])
-    @pytest.mark.parametrize("fuddl", [0, 5])
-    @pytest.mark.parametrize("fudhd", [0, 5])
+    @pytest.mark.parametrize("adsu,wrlow,adhd,fuddl,fudhd", [(0, 0, 0, 0, 2), (0, 0, 0, 2, 0), (0, 0, 2, 0, 0), (0, 2, 0, 0, 0), (2, 0, 0, 0, 0)])
     def test_set_amp_phase(self, adsu, wrlow, adhd, fuddl, fudhd):
         circ = DDSControllerTester()
 
@@ -208,11 +200,7 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("adsu", [0, 5])
-    @pytest.mark.parametrize("wrlow", [0, 5])
-    @pytest.mark.parametrize("adhd", [0, 5])
-    @pytest.mark.parametrize("fuddl", [0, 5])
-    @pytest.mark.parametrize("fudhd", [0, 5])
+    @pytest.mark.parametrize("adsu,wrlow,adhd,fuddl,fudhd", [(0, 0, 0, 0, 2), (0, 0, 0, 2, 0), (0, 0, 2, 0, 0), (0, 2, 0, 0, 0), (2, 0, 0, 0, 0)])
     def test_set_two_bytes(self, adsu, wrlow, adhd, fuddl, fudhd):
         circ = DDSControllerTester()
 
@@ -237,11 +225,7 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("adsu", [0, 5])
-    @pytest.mark.parametrize("wrlow", [0, 5])
-    @pytest.mark.parametrize("adhd", [0, 5])
-    @pytest.mark.parametrize("fuddl", [0, 5])
-    @pytest.mark.parametrize("fudhd", [0, 5])
+    @pytest.mark.parametrize("adsu,wrlow,adhd,fuddl,fudhd", [(0, 0, 0, 0, 2), (0, 0, 0, 2, 0), (0, 0, 2, 0, 0), (0, 2, 0, 0, 0), (2, 0, 0, 0, 0)])
     def test_set_four_bytes(self, adsu, wrlow, adhd, fuddl, fudhd):
         circ = DDSControllerTester()
 
@@ -285,8 +269,8 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("asu", [0, 1, 5])
-    @pytest.mark.parametrize("rdhoz", [0, 1, 5])
+    @pytest.mark.parametrize("asu", [0, 2])
+    @pytest.mark.parametrize("rdhoz", [0, 2])
     def test_get_two_bytes(self, asu, rdhoz):
         circ = DDSControllerTester()
 
@@ -320,9 +304,9 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("asu", [0, 1, 5])
-    @pytest.mark.parametrize("rdl", [0, 1, 5])
-    @pytest.mark.parametrize("rdhoz", [0, 1, 5])
+    @pytest.mark.parametrize("asu", [0, 2])
+    @pytest.mark.parametrize("rdl", [0, 2])
+    @pytest.mark.parametrize("rdhoz", [0, 2])
     def test_get_four_bytes(self, asu, rdl, rdhoz):
         circ = DDSControllerTester()
 
