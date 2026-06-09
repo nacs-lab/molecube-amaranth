@@ -33,4 +33,4 @@ jobs:
           pip3 install amaranth-yosys
 
       - name: Run tests
-        run: pytest -n auto --verbose
+        run: pytest -n auto --maxschedchunk 1 --verbose
