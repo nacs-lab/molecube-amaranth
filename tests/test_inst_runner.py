@@ -1260,10 +1260,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randint(0, 0x7e)
+        addr1 = random.randrange(0, 0x7f, 2)
         data1 = random.randint(0, 0xffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randint(0, 0x7e)
+        addr2 = random.randrange(0, 0x7f, 2)
         data2 = random.randint(0, 0xffff)
 
         async def producer(sim):
@@ -1309,10 +1309,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randint(0, 0x7c)
+        addr1 = random.randrange(0, 0x7d, 2)
         data1 = random.randint(0, 0xffff_ffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randint(0, 0x7c)
+        addr2 = random.randrange(0, 0x7d, 2)
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
@@ -1401,10 +1401,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randint(0, 0x7e)
+        addr1 = random.randrange(0, 0x7f, 2)
         data1 = random.randint(0, 0xffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randint(0, 0x7e)
+        addr2 = random.randrange(0, 0x7f, 2)
         data2 = random.randint(0, 0xffff)
 
         async def producer(sim):
@@ -1462,10 +1462,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randint(0, 0x7c)
+        addr1 = random.randrange(0, 0x7d, 2)
         data1 = random.randint(0, 0xffff_ffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randint(0, 0x7c)
+        addr2 = random.randrange(0, 0x7d, 2)
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):

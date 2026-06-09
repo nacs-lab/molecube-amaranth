@@ -33,8 +33,8 @@ SET_ARG = StructLayout(dict(
     hold_cnt=6,
     read=1,
     reset=1,
-    addr1=7,
-    addr2=7,
+    addr1=6,
+    addr2=6,
     data1=16,
     data2=16,
 ))
@@ -49,7 +49,7 @@ class DDSReq:
                     hold_cnt=self.csr.dds_write_adsu,
                     read=0, reset=0,
                     addr1=addr1, data1=data1,
-                    addr2=xvalue(m, 7), data2=xvalue(m, 16))
+                    addr2=xvalue(m, 6), data2=xvalue(m, 16))
 
     def write2(self, m, *, id, addr1, data1, addr2, data2):
         return dict(state=FSMState.WR_ADSETUP1,
@@ -60,20 +60,22 @@ class DDSReq:
                     addr2=addr2, data2=data2)
 
     def set_freq(self, m, *, id, freq):
-        return self.write2(m, id=id, addr1=0x2d, data1=freq[:16],
-                           addr2=0x2f, data2=freq[16:])
+        return self.write2(m, id=id, addr1=0x2d >> 1, data1=freq[:16],
+                           addr2=0x2f >> 1, data2=freq[16:])
 
     def set_amp_phase(self, m, *, id, amp, phase):
-        return self.write2(m, id=id, addr1=0x33, data1=C(0, 16) | amp,
-                           addr2=0x31, data2=phase)
+        return self.write2(m, id=id, addr1=0x33 >> 1, data1=C(0, 16) | amp,
+                           addr2=0x31 >> 1, data2=phase)
 
     def set_two_bytes(self, m, *, id, addr, data):
-        return self.write1(m, id=id, addr1=addr, data1=data)
+        return self.write1(m, id=id, addr1=addr >> 1, data1=data)
 
     def set_four_bytes(self, m, *, id, addr, data, addr_2=None):
         if addr_2 is None:
-            addr_2 = addr + 2
-        return self.write2(m, id=id, addr1=addr, data1=data[:16],
+            addr_2 = (addr >> 1) + 1
+        else:
+            addr_2 = addr_2 >> 1
+        return self.write2(m, id=id, addr1=addr >> 1, data1=data[:16],
                            addr2=addr_2, data2=data[16:])
 
     def reset(self, m, *, id, addr1=0, data1=0):
@@ -81,26 +83,28 @@ class DDSReq:
                     id=id,
                     hold_cnt=self.csr.dds_reset_rshd,
                     read=0, reset=1,
-                    addr1=addr1, data1=data1,
-                    addr2=xvalue(m, 7), data2=xvalue(m, 16))
+                    addr1=addr1 >> 1, data1=data1,
+                    addr2=xvalue(m, 6), data2=xvalue(m, 16))
 
     def get_two_bytes(self, m, *, id, addr, data1=0, data2=0):
         return dict(state=FSMState.RD_ASETUP2,
                     id=id,
                     hold_cnt=self.csr.dds_read_asu,
                     read=1, reset=0,
-                    addr1=addr, data1=data1,
-                    addr2=xvalue(m, 7), data2=data2)
+                    addr1=addr >> 1, data1=data1,
+                    addr2=xvalue(m, 6), data2=data2)
 
     def get_four_bytes(self, m, *, id, addr, addr_2=None, data1=0):
         if addr_2 is None:
-            addr_2 = addr + 2
+            addr_2 = (addr >> 1) + 1
+        else:
+            addr_2 = addr_2 >> 1
         return dict(state=FSMState.RD_ASETUP1,
                     id=id,
                     hold_cnt=self.csr.dds_read_asu,
                     read=1, reset=0,
                     addr1=addr_2, data1=data1,
-                    addr2=addr, data2=xvalue(m, 16))
+                    addr2=addr >> 1, data2=xvalue(m, 16))
 
 class DDSController(Elaboratable):
     def __init__(self, ddsio, result_fifo, csr):
@@ -121,12 +125,12 @@ class DDSController(Elaboratable):
         dds_fud = Signal(1)
         dds_cs = Signal(11)
 
-        dds_addr = Signal(7)
+        dds_addr = Signal(6)
         dds_data_oe = Signal(1, init=1) # output by default
         dds_data_out = Signal(16)
         dds_data_in = Signal(16)
 
-        m.d.comb += [ddsio.addr.o.eq(dds_addr),
+        m.d.comb += [ddsio.addr.o.eq(Cat(1, dds_addr)),
                      ddsio.data.oe.eq(dds_data_oe),
                      ddsio.data.o.eq(dds_data_out),
                      dds_data_in.eq(ddsio.data.i),
@@ -139,7 +143,7 @@ class DDSController(Elaboratable):
         fsm_state = Signal(FSMState)
         hold_cnt = Signal(6)
 
-        dds_next_addr = Signal(7)
+        dds_next_addr = Signal(6)
         dds_next_data = Signal(16)
 
         ## DDS parallel write sequence:

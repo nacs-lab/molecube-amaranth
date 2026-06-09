@@ -198,7 +198,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_fudhd, fudhd)
             for _ in range(100):
                 id = random.randint(0, 10)
-                addr = random.randint(0, 0x7f)
+                addr = random.randrange(1, 0x80, 2)
                 data = random.randint(0, 0xffff)
 
                 await circ.set_two_bytes.call(sim, id=id, addr=addr, data=data)
@@ -224,7 +224,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_fudhd, fudhd)
             for _ in range(100):
                 id = random.randint(0, 10)
-                addr = random.randint(0, 0x7c)
+                addr = random.randrange(1, 0x7e, 2)
                 data = random.randint(0, 0xffff_ffff)
 
                 await circ.set_four_bytes.call(sim, id=id, addr=addr, data=data)
@@ -262,7 +262,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
             for _ in range(10):
                 id = random.randint(0, 10)
-                addr = random.randint(0, 0x7f)
+                addr = random.randrange(1, 0x80, 2)
                 data = random.randint(0, 0xffff)
 
                 dummy_result = random.randint(0, 0xffff_ffff)
@@ -296,7 +296,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
             for _ in range(10):
                 id = random.randint(0, 10)
-                addr = random.randint(0, 0x7d)
+                addr = random.randrange(1, 0x7e, 2)
                 data = random.randint(0, 0xffff_ffff)
 
                 dummy_result = random.randint(0, 0xffff_ffff)
