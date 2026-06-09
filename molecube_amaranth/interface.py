@@ -49,7 +49,8 @@ class ControlInterface(Elaboratable):
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
-        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count']:
+        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
+                         'dds0_reg', 'dds1_reg']:
             real_reg = getattr(csr, reg_name)
             rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             setattr(rd_shadow, reg_name, rd_reg)
@@ -147,6 +148,11 @@ class ControlInterface(Elaboratable):
                     self.ioctrl.ttlout.set_bank_user(m, bank=6, value=data)
                 with m.Case(0x46):
                     self.ioctrl.ttlout.set_bank_user(m, bank=7, value=data)
+
+                with m.Case(0x48):
+                    self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                with m.Case(0x49):
+                    self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
 
                 with m.Case(0x50):
                     axi_write_reg(m, Cat(wr_shadow.dds_timing1,
@@ -264,6 +270,9 @@ class ControlInterface(Elaboratable):
                 0x44: ttl_out_reg(5),
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
+
+                0x48: rd_shadow.dds0_reg,
+                0x49: rd_shadow.dds1_reg,
 
                 0x50: rd_shadow.dds_timing1 | C(0, self.data_width),
                 0x51: rd_shadow.dds_timing2 | C(0, self.data_width),

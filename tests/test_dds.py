@@ -19,9 +19,12 @@ import pytest
 import random
 
 class DDSControllerTester(Elaboratable):
-    def __init__(self):
+    def __init__(self, bus_id=0):
+        self.bus_id = bus_id
         self.port = port = get_dds_ports(None, 0)
         self._buff = DDSBuff(port)
+
+        self.cache = [[0 for addr in range(2**6)] for dds_id in range(11)]
 
         config = Config()
 
@@ -30,7 +33,7 @@ class DDSControllerTester(Elaboratable):
         fifo = ResultFifo(32, 256)
         self.fifo = SimpleTestCircuit(fifo)
 
-        self.controller = DDSController(self._buff, fifo, self.csr)
+        self.controller = DDSController(self._buff, fifo, self.csr, bus_id=bus_id)
 
         self._set_freq = Method(i=[('id', 4), ('freq', 32)])
         self._set_amp_phase = Method(i=[('id', 4), ('amp', 12), ('phase', 16)])
@@ -49,6 +52,8 @@ class DDSControllerTester(Elaboratable):
         self.get_two_bytes = _TestbenchIO(AdapterTrans.create(self._get_two_bytes))
         self.get_four_bytes = _TestbenchIO(AdapterTrans.create(self._get_four_bytes))
 
+        self.read_dds_cache = _TestbenchIO(AdapterTrans.create(self.controller.read_dds_cache))
+
     def elaborate(self, _):
         m = TModule()
 
@@ -65,6 +70,8 @@ class DDSControllerTester(Elaboratable):
         m.submodules.reset = self.reset
         m.submodules.get_two_bytes = self.get_two_bytes
         m.submodules.get_four_bytes = self.get_four_bytes
+
+        m.submodules.read_dds_cache = self.read_dds_cache
 
         dds_req = DDSReq(self.csr)
 
@@ -105,21 +112,38 @@ class DDSControllerTester(Elaboratable):
         return self.cache[id][addr]
 
     async def check_write1(self, sim, id, addr1, data1):
+        self.set_cache(id, addr1 >> 1, data1)
         await DDSChecker.set1(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1)
         await DDSChecker.idle(sim, self.port)
 
     async def check_write2(self, sim, id, addr1, data1, addr2, data2):
+        self.set_cache(id, addr1 >> 1, data1)
+        self.set_cache(id, addr2 >> 1, data2)
         await DDSChecker.set2(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1,
                               addr2=addr2, data2=data2)
         await DDSChecker.idle(sim, self.port)
 
     async def check_read1(self, sim, id, addr, data):
+        self.set_cache(id, addr >> 1, data)
         await DDSChecker.get1(sim, self.csr, self.port, id=id, addr=addr, data=data)
         await DDSChecker.idle(sim, self.port)
 
     async def check_read2(self, sim, id, addr, data):
+        self.set_cache(id, addr >> 1, data & 0xffff)
+        self.set_cache(id, (addr >> 1) + 1, data >> 16)
         await DDSChecker.get2(sim, self.csr, self.port, id=id, addr=addr, data=data)
         await DDSChecker.idle(sim, self.port)
+
+    async def read_cache(self, sim, id, addr):
+        await self.read_dds_cache.call(sim, id=id, addr=addr)
+        for _ in range(5):
+            await sim.tick()
+        return sim.get((self.csr.dds0_reg, self.csr.dds1_reg)[self.bus_id])
+
+    async def check_cache(self, sim, targets):
+        for id, addr in targets:
+            v = await self.read_cache(sim, id, addr)
+            assert self.get_cache(id, addr) == v
 
 class TestDDS(TestCaseWithSimulator):
     def test_idle(self):
@@ -152,6 +176,7 @@ class TestDDS(TestCaseWithSimulator):
                 await circ.set_freq.call(sim, id=id, freq=freq)
 
                 await circ.check_write2(sim, id, 0x2d, freq & 0xffff, 0x2f, freq >> 16)
+            await circ.check_cache(sim, ((id, addr) for id in range(11) for addr in (0x2d >> 1, 0x2f >> 1)))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -178,6 +203,7 @@ class TestDDS(TestCaseWithSimulator):
                 await circ.set_amp_phase.call(sim, id=id, amp=amp, phase=phase)
 
                 await circ.check_write2(sim, id, 0x33, amp, 0x31, phase)
+            await circ.check_cache(sim, ((id, addr) for id in range(11) for addr in (0x33 >> 1, 0x31 >> 1)))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -196,14 +222,17 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            targets = set()
             for _ in range(100):
                 id = random.randint(0, 10)
                 addr = random.randrange(1, 0x80, 2)
                 data = random.randint(0, 0xffff)
+                targets.add((id, addr >> 1))
 
                 await circ.set_two_bytes.call(sim, id=id, addr=addr, data=data)
 
                 await circ.check_write1(sim, id, addr, data)
+            await circ.check_cache(sim, sorted(targets))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -222,15 +251,19 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            targets = set()
             for _ in range(100):
                 id = random.randint(0, 10)
                 addr = random.randrange(1, 0x7e, 2)
                 data = random.randint(0, 0xffff_ffff)
+                targets.add((id, addr >> 1))
+                targets.add((id, (addr >> 1) + 1))
 
                 await circ.set_four_bytes.call(sim, id=id, addr=addr, data=data)
 
                 await circ.check_write2(sim, id, addr, data & 0xffff,
                                         addr + 2, data >> 16)
+            await circ.check_cache(sim, sorted(targets))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -260,6 +293,7 @@ class TestDDS(TestCaseWithSimulator):
         async def f(sim):
             sim.set(circ.csr.dds_read_asu, asu)
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
+            targets = set()
             for _ in range(10):
                 id = random.randint(0, 10)
                 addr = random.randrange(1, 0x80, 2)
@@ -271,6 +305,7 @@ class TestDDS(TestCaseWithSimulator):
                 await circ.get_two_bytes.call(sim, id=id, addr=addr)
 
                 await circ.check_read1(sim, id, addr, data)
+                targets.add((id, addr >> 1))
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
@@ -280,6 +315,7 @@ class TestDDS(TestCaseWithSimulator):
                 assert (await circ.fifo.read.call(sim)).data == dummy_result
                 assert (await circ.fifo.read.call(sim)).data == data
                 assert (await circ.fifo.read.call(sim)).data == dummy_result2
+            await circ.check_cache(sim, sorted(targets))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -294,6 +330,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_read_asu, asu)
             sim.set(circ.csr.dds_read_rdl, rdl)
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
+            targets = set()
             for _ in range(10):
                 id = random.randint(0, 10)
                 addr = random.randrange(1, 0x7e, 2)
@@ -305,6 +342,8 @@ class TestDDS(TestCaseWithSimulator):
                 await circ.get_four_bytes.call(sim, id=id, addr=addr)
 
                 await circ.check_read2(sim, id, addr, data)
+                targets.add((id, addr >> 1))
+                targets.add((id, (addr >> 1) + 1))
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
@@ -314,6 +353,7 @@ class TestDDS(TestCaseWithSimulator):
                 assert (await circ.fifo.read.call(sim)).data == dummy_result
                 assert (await circ.fifo.read.call(sim)).data == data
                 assert (await circ.fifo.read.call(sim)).data == dummy_result2
+            await circ.check_cache(sim, sorted(targets))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
