@@ -254,7 +254,7 @@ class TestDDS(TestCaseWithSimulator):
             targets = set()
             for _ in range(100):
                 id = random.randint(0, 10)
-                addr = random.randrange(1, 0x7e, 2)
+                addr = random.randrange(1, 0x7e, 4)
                 data = random.randint(0, 0xffff_ffff)
                 targets.add((id, addr >> 1))
                 targets.add((id, (addr >> 1) + 1))
@@ -333,7 +333,7 @@ class TestDDS(TestCaseWithSimulator):
             targets = set()
             for _ in range(10):
                 id = random.randint(0, 10)
-                addr = random.randrange(1, 0x7e, 2)
+                addr = random.randrange(1, 0x7e, 4)
                 data = random.randint(0, 0xffff_ffff)
 
                 dummy_result = random.randint(0, 0xffff_ffff)

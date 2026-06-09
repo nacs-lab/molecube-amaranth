@@ -1309,10 +1309,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randrange(0, 0x7d, 2)
+        addr1 = random.randrange(0, 0x7d, 4)
         data1 = random.randint(0, 0xffff_ffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randrange(0, 0x7d, 2)
+        addr2 = random.randrange(0, 0x7d, 4)
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
@@ -1462,10 +1462,10 @@ class TestInstRunner(TestCaseWithSimulator):
         circ = InstRunnerTester(config(clock_shift=clock_shift))
 
         id1 = random.randint(0, 10)
-        addr1 = random.randrange(0, 0x7d, 2)
+        addr1 = random.randrange(0, 0x7d, 4)
         data1 = random.randint(0, 0xffff_ffff)
         id2 = random.randint(11, 21)
-        addr2 = random.randrange(0, 0x7d, 2)
+        addr2 = random.randrange(0, 0x7d, 4)
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):

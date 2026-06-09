@@ -71,11 +71,8 @@ class DDSReq:
     def set_two_bytes(self, m, *, id, addr, data):
         return self.write1(m, id=id, addr1=addr >> 1, data1=data)
 
-    def set_four_bytes(self, m, *, id, addr, data, addr_2=None):
-        if addr_2 is None:
-            addr_2 = (addr >> 1) + 1
-        else:
-            addr_2 = addr_2 >> 1
+    def set_four_bytes(self, m, *, id, addr, data):
+        addr_2 = (addr >> 1) | 1
         return self.write2(m, id=id, addr1=addr >> 1, data1=data[:16],
                            addr2=addr_2, data2=data[16:])
 
@@ -95,11 +92,8 @@ class DDSReq:
                     addr1=addr >> 1, data1=data1,
                     addr2=xvalue(m, 6), data2=data2)
 
-    def get_four_bytes(self, m, *, id, addr, addr_2=None, data1=0):
-        if addr_2 is None:
-            addr_2 = (addr >> 1) + 1
-        else:
-            addr_2 = addr_2 >> 1
+    def get_four_bytes(self, m, *, id, addr, data1=0):
+        addr_2 = (addr >> 1) | 1
         return dict(state=FSMState.RD_ASETUP1,
                     id=id,
                     hold_cnt=self.csr.dds_read_asu,
