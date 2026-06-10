@@ -2,6 +2,7 @@
 
 from amaranth import *
 from amaranth.lib.data import ArrayLayout, View
+from amaranth.utils import ceil_log2
 
 from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
@@ -14,8 +15,10 @@ class TTLOutController(Elaboratable):
         self.csr = csr
         assert delay in (0, 1)
         self.delay = delay
+        self.nttls = len(self.ttloutio.o)
+        self.bank_width = ceil_log2(self.nttls) - 5
 
-        self.set_bank_inst = Method(i=[('bank', 3), ('value', 32)])
+        self.set_bank_inst = Method(i=[('bank', self.bank_width), ('value', 32)])
 
         for bank in range(8):
             setattr(self, f'set_bank_user{bank}', Method(i=[('value', 32)]))
@@ -23,7 +26,9 @@ class TTLOutController(Elaboratable):
     def elaborate(self, plat):
         m = TModule()
 
-        nttls = len(self.ttloutio.o)
+        nttls = self.nttls
+        nbanks = 2**self.bank_width
+        full_nttls = nbanks * 32
 
         ttl_hi_mask = Signal(nttls)
         ttl_lo_mask = Signal(nttls)
@@ -39,7 +44,8 @@ class TTLOutController(Elaboratable):
             ttl_out = Signal(nttls)
             m.d.sync += csr_ttl_out.eq(ttl_out)
 
-        ttl_banks = View(ArrayLayout(unsigned(32), 8), Cat(ttl_out, Signal(256 - nttls)))
+        ttl_banks = View(ArrayLayout(unsigned(32), nbanks),
+                         Cat(ttl_out, Signal(full_nttls - nttls)))
         m.d.comb += [self.ttloutio.oe.eq(1),
                      self.ttloutio.o.eq((csr_ttl_out | ttl_hi_mask) & ~ttl_lo_mask)]
 
