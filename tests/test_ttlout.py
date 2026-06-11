@@ -24,9 +24,9 @@ class TTLOutControllerTester(Elaboratable):
         self.csr = Registers(config)
         self.ttlout = TTLOutController(self.pulseio.ttlout, self.csr, delay=delay)
 
-        self._set_bank_user = Method(i=[('bank', 3), ('value', 32)])
+        self._set_byte_user = Method(i=[('byte', 5), ('value', 8)])
 
-        self.set_bank_user = _TestbenchIO(AdapterTrans.create(self._set_bank_user))
+        self.set_byte_user = _TestbenchIO(AdapterTrans.create(self._set_byte_user))
         self.set_bank_inst = _TestbenchIO(AdapterTrans.create(self.ttlout.set_bank_inst))
 
     def elaborate(self, _):
@@ -36,28 +36,16 @@ class TTLOutControllerTester(Elaboratable):
         m.submodules.csr = self.csr
         m.submodules.ttlout = self.ttlout
 
-        @def_method(m, self._set_bank_user)
-        def _(bank, value):
-            with m.Switch(bank):
-                with m.Case(0):
-                    self.ttlout.set_bank_user0(m, value)
-                with m.Case(1):
-                    self.ttlout.set_bank_user1(m, value)
-                with m.Case(2):
-                    self.ttlout.set_bank_user2(m, value)
-                with m.Case(3):
-                    self.ttlout.set_bank_user3(m, value)
-                with m.Case(4):
-                    self.ttlout.set_bank_user4(m, value)
-                with m.Case(5):
-                    self.ttlout.set_bank_user5(m, value)
-                with m.Case(6):
-                    self.ttlout.set_bank_user6(m, value)
-                with m.Case(7):
-                    self.ttlout.set_bank_user7(m, value)
+        @def_method(m, self._set_byte_user)
+        def _(byte, value):
+            with m.Switch(byte[2:]):
+                for i in range(8):
+                    with m.Case(i):
+                        getattr(self.ttlout, f'set_bank_user{i}')(m, byte=byte[:2],
+                                                                  hi=value, lo=~value)
 
         m.submodules.set_bank_inst = self.set_bank_inst
-        m.submodules.set_bank_user = self.set_bank_user
+        m.submodules.set_byte_user = self.set_byte_user
 
         return m
 
@@ -91,6 +79,10 @@ class TTLChecker:
         mask = ~(0xffff_ffff << (bank * 32))
         self._ttl_out_reg = (self._ttl_out_reg & mask) | ((value << (bank * 32)) & ((1 << 56) - 1))
 
+    def set_byte(self, byte, value):
+        mask = ~(0xff << (byte * 8))
+        self._ttl_out_reg = (self._ttl_out_reg & mask) | ((value << (byte * 8)) & ((1 << 56) - 1))
+
 class TestTTLOut(TestCaseWithSimulator):
     @pytest.mark.parametrize("delay", [0, 1])
     def test_set_inst(self, delay):
@@ -117,11 +109,11 @@ class TestTTLOut(TestCaseWithSimulator):
 
         async def f(sim):
             for _ in range(1000):
-                bank = random.randint(0, 1)
-                value = random.randint(0, 0xffff_ffff)
-                await circ.set_bank_user.call(sim, bank=bank, value=value)
-                checker.set_bank(bank, value)
-                for _ in range(4):
+                byte = random.randint(0, 7)
+                value = random.randint(0, 0xff)
+                await circ.set_byte_user.call(sim, byte=byte, value=value)
+                checker.set_byte(byte, value)
+                for _ in range(6):
                     checker.tick()
                     await sim.tick()
                 assert sim.get(circ.csr.ttl_out) == checker.ttl_out_reg

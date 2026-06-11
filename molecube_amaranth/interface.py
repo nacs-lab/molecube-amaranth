@@ -102,7 +102,8 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x03):
                     axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
                 with m.Case(0x04):
-                    self.ioctrl.ttlout.set_bank_user0(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
 
                 with m.Case(0x10):
                     axi_write_reg(m, wr_ttl_hi(1), data, strb)
@@ -135,19 +136,26 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x1e):
                     axi_write_reg(m, wr_shadow.loopback, data, strb)
                 with m.Case(0x40):
-                    self.ioctrl.ttlout.set_bank_user1(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x41):
-                    self.ioctrl.ttlout.set_bank_user2(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x42):
-                    self.ioctrl.ttlout.set_bank_user3(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x43):
-                    self.ioctrl.ttlout.set_bank_user4(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x44):
-                    self.ioctrl.ttlout.set_bank_user5(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x45):
-                    self.ioctrl.ttlout.set_bank_user6(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
                 with m.Case(0x46):
-                    self.ioctrl.ttlout.set_bank_user7(m, value=data)
+                    self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
+                                                      byte=data[16:18])
 
                 with m.Case(0x48):
                     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])

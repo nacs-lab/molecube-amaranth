@@ -21,7 +21,7 @@ class TTLOutController(Elaboratable):
         self.set_bank_inst = Method(i=[('bank', self.bank_width), ('value', 32)])
 
         for bank in range(8):
-            setattr(self, f'set_bank_user{bank}', Method(i=[('value', 32)]))
+            setattr(self, f'set_bank_user{bank}', Method(i=[('byte', 2), ('hi', 8), ('lo', 8)]))
 
     def elaborate(self, plat):
         m = TModule()
@@ -53,28 +53,54 @@ class TTLOutController(Elaboratable):
             meth = getattr(self, f'set_bank_user{bank}')
             if bank * 32 >= nttls:
                 @def_method(m, meth, singlecaller=True)
-                def _(value):
+                def _(byte, hi, lo):
                     pass
                 continue
             ttl_bank_reg = ttl_banks[bank]
 
-            ttl_bank_write_en = Signal()
-            ttl_bank_write_data = Signal(32)
+            setattr(m.submodules, f'set_pipe_bank{bank}',
+                    (set_pipe := PipelineBuilder()))
 
-            with m.If(ttl_bank_write_en):
-                m.d.sync += ttl_bank_reg.eq(ttl_bank_write_data)
-
-            ttl_bank_write_en_in = Signal()
-            ttl_bank_write_data_in = Signal(32)
-            m.d.sync += ttl_bank_write_en_in.eq(0)
-            assign_xvalue(m, ttl_bank_write_data_in)
-            reg_chain(m, output=Cat(ttl_bank_write_en, ttl_bank_write_data),
-                      input=Cat(ttl_bank_write_en_in, ttl_bank_write_data_in),
-                      levels=2)
+            set_en = Signal()
+            set_byte = Signal(2)
+            set_hi = Signal(8)
+            set_lo = Signal(8)
+            m.d.sync += set_en.eq(0)
+            assign_xvalue(m, Cat(set_byte, set_hi, set_lo))
             @def_method(m, meth, singlecaller=True)
-            def _(value):
-                m.d.sync += [ttl_bank_write_en_in.eq(1),
-                             ttl_bank_write_data_in.eq(value)]
+            def _(byte, hi, lo):
+                m.d.sync += [set_en.eq(1),
+                             set_byte.eq(byte),
+                             set_hi.eq(hi),
+                             set_lo.eq(lo)]
+
+            start_set = set_pipe.create_external(i=[('en', 1), ('byte', 2),
+                                                    ('hi', 8), ('lo', 8)], o=[])
+            with Transaction().body(m):
+                start_set(m, en=set_en, byte=set_byte, hi=set_hi, lo=set_lo)
+
+            @set_pipe.stage(m)
+            def _():
+                pass
+
+            @set_pipe.stage(m)
+            def _():
+                pass
+
+            @set_pipe.stage(m, o=[('mask_hi', 32), ('mask_lo', 32)])
+            def _(byte, hi, lo):
+                mask_hi = Signal(32)
+                mask_lo = Signal(32)
+                hi_bytes = View(ArrayLayout(unsigned(8), 4), mask_hi)
+                lo_bytes = View(ArrayLayout(unsigned(8), 4), mask_lo)
+                m.d.top_comb += [hi_bytes[byte].eq(hi),
+                                 lo_bytes[byte].eq(lo)]
+                return dict(mask_hi=mask_hi, mask_lo=mask_lo)
+
+            @set_pipe.stage(m)
+            def _(en, mask_hi, mask_lo):
+                with m.If(en):
+                    m.d.sync += ttl_bank_reg.eq((ttl_bank_reg | mask_hi) & ~mask_lo)
 
         @def_method(m, self.set_bank_inst, combiner=oring_combiner, nonexclusive=True)
         def _(bank, value):

@@ -60,6 +60,7 @@ class InterfaceWrapper(Elaboratable):
 
         self.read_only_regs = {
             0x02: self.csr.timing_status,
+            # 0x04: self.ttl_out_reg(0),
             0x05: self.csr.clockout_div,
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
@@ -81,19 +82,19 @@ class InterfaceWrapper(Elaboratable):
             0x2f: self.csr.dbg_result_generated.value,
             0x30: self.csr.dbg_result_consumed.value,
 
-            0x41: self.ttl_out_reg(2),
-            0x42: self.ttl_out_reg(3),
-            0x43: self.ttl_out_reg(4),
-            0x44: self.ttl_out_reg(5),
-            0x45: self.ttl_out_reg(6),
-            0x46: self.ttl_out_reg(7),
+            # 0x40: self.ttl_out_reg(1),
+            # 0x41: self.ttl_out_reg(2),
+            # 0x42: self.ttl_out_reg(3),
+            # 0x43: self.ttl_out_reg(4),
+            # 0x44: self.ttl_out_reg(5),
+            # 0x45: self.ttl_out_reg(6),
+            # 0x46: self.ttl_out_reg(7),
         }
 
         self.read_write_regs = {
             0x00: self.ttl_hi_reg(0),
             0x01: self.ttl_lo_reg(0),
             0x03: self.csr.timing_ctrl,
-            0x04: self.ttl_out_reg(0),
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),
             0x12: self.ttl_hi_reg(2),
@@ -109,8 +110,6 @@ class InterfaceWrapper(Elaboratable):
             0x1c: self.ttl_hi_reg(7),
             0x1d: self.ttl_lo_reg(7),
             0x1e: self.csr.loopback,
-
-            0x40: self.ttl_out_reg(1),
 
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
@@ -280,23 +279,14 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            if idx == 0x40:
-                masks[idx] = (1 << 24) - 1
-            else:
-                masks[idx] = (1 << len(reg)) - 1
+            masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
             for _ in range(5):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
-                    if idx in (0x04, 0x40):
-                        # TTL out register does not support partial write
-                        write_delay = 6
-                        strb = 0xf
-                    else:
-                        write_delay = 3
-                        strb = random.randint(0, 0xf)
+                    strb = random.randint(0, 0xf)
                     assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                                strb=strb,
                                                                data=data)) is not None
@@ -304,7 +294,7 @@ class TestInterface(TestCaseWithSimulator):
                     for _ in range(3):
                         await sim.tick()
                     assert (await iface.write_reply.call_try(sim)) is not None
-                    for _ in range(write_delay):
+                    for _ in range(3):
                         await sim.tick()
                     assert sim.get(reg) == data
 
@@ -325,10 +315,7 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            if idx == 0x40:
-                masks[idx] = (1 << 24) - 1
-            else:
-                masks[idx] = (1 << len(reg)) - 1
+            masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 
@@ -338,11 +325,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(ncycles):
                 idx = random.choice(idxs)
                 data = random.randint(0, 0xffff_ffff)
-                if idx in (0x04, 0x40):
-                    # TTL out register does not support partial write
-                    strb = 0xf
-                else:
-                    strb = random.randint(0, 0xf)
+                strb = random.randint(0, 0xf)
                 assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                            strb=strb,
                                                            data=data)) is not None
@@ -363,6 +346,48 @@ class TestInterface(TestCaseWithSimulator):
         with self.run_simulation(iface) as sim:
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
+
+    @pytest.mark.parametrize("addr_width", [9, 20])
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_ttlout(self, addr_width, clock_shift):
+        iface = InterfaceWrapper(addr_width=addr_width, clock_shift=clock_shift)
+        idxs = [0x4, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
+
+        async def f(sim):
+            ttl_val = 0
+            for _ in range(20):
+                for bank, idx in enumerate(idxs):
+                    byte = random.randint(0, 3)
+                    hi = random.randint(0, 0xff)
+                    lo = random.randint(0, 0xff)
+                    lo = lo & ~hi
+
+                    cmd = hi | (lo << 8) | (byte << 16)
+
+                    assert (await iface.write_request.call_try(sim, addr=idx * 4,
+                                                               strb=0xf,
+                                                               data=cmd)) is not None
+                    for _ in range(3):
+                        await sim.tick()
+                    assert (await iface.write_reply.call_try(sim)) is not None
+
+                    shift = (byte + 4 * bank) * 8
+                    ttl_val = ((ttl_val | (hi << shift)) & ~(lo << shift)) & 0xff_ffff_ffff_ffff
+                    for _ in range(8):
+                        await sim.tick()
+
+                    assert sim.get(iface.csr.ttl_out) == ttl_val
+
+            for bank, idx in enumerate(idxs):
+                assert (await iface.read_request.call_try(sim, addr=idx * 4)) is not None
+                for _ in range(25):
+                    await sim.tick()
+                assert (await iface.read_reply.call_try(sim)).data == (ttl_val >> (bank * 32)) & 0xffff_ffff
+
+            assert sim.get(iface.pulseio.ttlout_port.o) == (sim.get(iface.csr.ttl_out) | sim.get(iface.csr.ttl_hi_mask)) & ~sim.get(iface.csr.ttl_lo_mask) & 0xff_ffff_ffff_ffff
+
+        with self.run_simulation(iface) as sim:
+            sim.add_testbench(f)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
     def test_write_command(self, addr_width):
