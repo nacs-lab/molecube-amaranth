@@ -2,15 +2,20 @@
 
 from amaranth import *
 from amaranth.lib import io
+from amaranth.lib.memory import Memory, MemoryData
+from amaranth.utils import exact_log2
 
 from amaranth_axi.axibus import AXI3
 from amaranth_axi.axitools import AXISlaveReadIFace
 
-from transactron import TModule, Method, def_method
+from transactron import Transaction, TModule, Method, def_method
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO, SimpleTestCircuit, CallTrigger
 from transactron.lib.adapters import AdapterTrans
 
-from molecube_amaranth.dma import CountKeeper, AXIReadStream
+from molecube_amaranth.config import Config
+from molecube_amaranth.csr import Registers
+from molecube_amaranth.dma import CountKeeper, AXIReadStream, DMAController
+from molecube_amaranth.fifo import Fifos
 
 import pytest
 import random
@@ -286,3 +291,206 @@ class TestAXIReadStream(TestCaseWithSimulator):
             sim.add_testbench(producer)
             sim.add_testbench(replier)
             sim.add_testbench(consumer)
+
+
+class AXIMem(Elaboratable):
+    def __init__(self, axi, mem_len):
+        self.data_width = len(axi.RDATA)
+        self.axi = axi
+        self.data = MemoryData(shape=self.data_width,
+                               depth=mem_len, init=())
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        m.submodules.read_slave = read_slave = AXISlaveReadIFace(self.axi)
+        m.submodules.mem = mem = Memory(self.data)
+        read_port = mem.read_port(domain='comb')
+
+        addr_shift = exact_log2(self.data_width) - 3
+
+        with Transaction().body(m):
+            req = read_slave.get(m)
+            m.d.comb += read_port.addr.eq(req.addr >> addr_shift)
+            read_slave.done(m, id=req.id, data=read_port.data, last=req.last)
+
+        return m
+
+
+class DMAControllerWrapper(Elaboratable):
+    def __init__(self):
+        axi = AXI3(64, 16, 3).create()
+        config = Config()
+
+        self.mem = AXIMem(axi, 1 << 10)
+        self.csr = Registers(config)
+        self.fifos = Fifos(32, dma_addr_width=len(axi.ARADDR))
+        self.fifo = self.fifos.dma_cmd_fifo
+        self.ctrl = DMAController(axi, self.csr, self.fifos)
+
+        self.data = self.mem.data
+
+        self.queue_cmd = _TestbenchIO(AdapterTrans.create(self.fifo.write))
+        self.read_inst = _TestbenchIO(AdapterTrans.create(self.ctrl.read_inst))
+        self.inst_started = _TestbenchIO(AdapterTrans.create(self.ctrl.inst_started))
+        self.inst_stopped = _TestbenchIO(AdapterTrans.create(self.ctrl.inst_stopped))
+        self.trig_timeout = _TestbenchIO(AdapterTrans.create(self.ctrl.trig_timeout))
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        m.submodules.mem = self.mem
+        m.submodules.csr = self.csr
+        m.submodules.fifos = self.fifos
+        m.submodules.ctrl = self.ctrl
+
+        m.submodules.queue_cmd = self.queue_cmd
+        m.submodules.read_inst = self.read_inst
+        m.submodules.inst_started = self.inst_started
+        m.submodules.inst_stopped = self.inst_stopped
+        m.submodules.trig_timeout = self.trig_timeout
+
+        return m
+
+
+class TestDMAController(TestCaseWithSimulator):
+    def test_overflow(self):
+        circ = DMAControllerWrapper()
+
+        async def wait(sim, n=5):
+            for _ in range(n):
+                await sim.tick()
+
+        async def f(sim):
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+            await circ.inst_started.call(sim)
+            await wait(sim)
+            # Running
+            assert sim.get(circ.csr.dma_status) == 9 << 8
+            await circ.inst_stopped.call(sim)
+            await wait(sim)
+            # Stopped
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+            await circ.inst_started.call(sim)
+            await wait(sim)
+            # Running & underflown
+            assert sim.get(circ.csr.dma_status) == 11 << 8
+            await circ.inst_stopped.call(sim)
+            await wait(sim)
+            # Underflown
+            assert sim.get(circ.csr.dma_status) == 10 << 8
+
+            await circ.inst_started.call(sim)
+            await wait(sim)
+            # Running & underflown
+            assert sim.get(circ.csr.dma_status) == 11 << 8
+            await circ.inst_stopped.call(sim)
+            await wait(sim)
+            # Underflown
+            assert sim.get(circ.csr.dma_status) == 10 << 8
+
+            await circ.queue_cmd.call(sim, first=1)
+            await wait(sim)
+            # Cleared
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+            await circ.inst_started.call(sim)
+            await wait(sim)
+            # Running
+            assert sim.get(circ.csr.dma_status) == 9 << 8
+            await circ.inst_stopped.call(sim)
+            await wait(sim)
+            # Stopped
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)
+
+
+    def test_trig_timeout(self):
+        circ = DMAControllerWrapper()
+
+        async def wait(sim, n=5):
+            for _ in range(n):
+                await sim.tick()
+
+        async def f(sim):
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+            await circ.trig_timeout.call(sim)
+            await wait(sim)
+            assert sim.get(circ.csr.dma_status) == 12 << 8
+
+            await circ.queue_cmd.call(sim, first=1)
+            await wait(sim)
+            # Cleared
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)
+
+
+    def test_rand_inst(self):
+        circ = DMAControllerWrapper()
+
+        write_data = bytearray()
+        insts = []
+
+        def add_rand_inst(l):
+            data_len = (l + 1) * 16 - 2
+            data = random.randint(0, (1 << data_len) - 1)
+            inst = (data << 2) | l
+            inst_mask = (1 << (data_len + 2)) - 1
+            insts.append((inst, inst_mask))
+            write_data.extend(inst.to_bytes((l + 1) * 2, 'little'))
+
+        # Generate 2kB data which we'll split into two blocks of 1kB memory
+        # Make sure the instruction crosses the 1kB boundary
+        while len(write_data) < 1024 - 6:
+            add_rand_inst(random.randint(0, 2))
+        if len(write_data) == 1024 - 6:
+            add_rand_inst(1)
+            assert len(write_data) < 1024
+        add_rand_inst(2)
+        assert len(write_data) > 1024
+        while len(write_data) <= 2048 - 6:
+            add_rand_inst(random.randint(0, 2))
+
+        padding_len = 2048 - len(write_data)
+        if padding_len != 0:
+            assert padding_len in (2, 4)
+            add_rand_inst((padding_len - 2) >> 1)
+
+        assert len(write_data) == 2048
+
+        def test_inst(res):
+            inst, mask = insts.pop(0)
+            assert inst == res.inst & mask
+
+        async def f(sim):
+            for i in range(128):
+                sim.set(circ.data[i],
+                        int.from_bytes(write_data[i * 8:i * 8 + 8], 'little'))
+
+            for i in range(128):
+                sim.set(circ.data[i + 512],
+                        int.from_bytes(write_data[(i + 128) * 8:(i + 128) * 8 + 8],
+                                       'little'))
+
+            await circ.queue_cmd.call(sim, addr=0, blocks=7)
+            await circ.queue_cmd.call(sim, addr=4096, blocks=7)
+
+            test_inst(await circ.read_inst.call(sim))
+            while insts:
+                test_inst(await circ.read_inst.call_try(sim))
+
+            for _ in range(10):
+                assert await circ.read_inst.call_try(sim) is None
+                await sim.tick()
+
+            assert sim.get(circ.csr.dma_status) == (8 << 8) | 2
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)

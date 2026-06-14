@@ -67,7 +67,7 @@ class Registers(Elaboratable):
         self.loopback = Signal(self.REG_WIDTH)
         self.dds0_reg = Signal(self.REG_WIDTH)
         self.dds1_reg = Signal(self.REG_WIDTH)
-        self.dma_status = Signal(self.REG_WIDTH)
+        self.dma_status = Signal(self.REG_WIDTH, init=8 << 8)
         self.dma_ctrl = Signal(DMACtrl)
 
         # Semistatic

@@ -8,6 +8,7 @@ from amaranth_zynq.ps7 import PsZynq
 
 from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
+from molecube_amaranth.dma import DMAController
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.interface import ControlInterface
@@ -27,6 +28,7 @@ class TopLevel(Elaboratable):
         clk = ps.get_clock_signal(0, self.config.CLOCK_HZ)
         m.d.comb += ClockSignal().eq(clk)
         m.d.comb += ps.MAXIGP0ACLK.eq(clk)
+        m.d.comb += ps.SAXIHP0ACLK.eq(clk)
 
         # Reset
         reset = ps.get_reset_signal(0)
@@ -46,5 +48,7 @@ class TopLevel(Elaboratable):
             pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
         m.submodules.inst_dispatcher = inst_dispatcher = InstDispatcher(
             regs, fifos)
+
+        m.submodules.dma_ctrl = dma_ctrl = DMAController(ps.SAXIHP0, regs, fifos)
 
         return m

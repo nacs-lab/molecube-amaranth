@@ -1,13 +1,16 @@
 #
 
 from amaranth import *
+from amaranth.lib.data import Struct
 from amaranth.utils import exact_log2
 
 from amaranth_axi.axitools import AXIMasterReadIFace
 
 from transactron import TModule, Transaction, Method, def_method
 
-from .utils import oring_combiner, assign_xvalue
+from .fifo import BufferedFifo
+from .inst_cutter import InstCutter
+from .utils import oring_combiner, assign_xvalue, reg_chain
 
 class CountKeeper(Elaboratable):
     def __init__(self, width):
@@ -135,5 +138,91 @@ class AXIReadStream(Elaboratable):
                 m.d.av_comb += islast.eq(count_keeper.done(m).last)
 
             return dict(data=rep.data, last=islast)
+
+        return m
+
+
+class DMAStatus(Struct):
+    transfer_count: 8
+    running: 1
+    underflow: 1
+    trig_timeout: 1
+    cmd_empty: 1
+    cmd_full: 1
+    _padding: 19
+
+
+class DMAController(Elaboratable):
+    def __init__(self, axi, csr, fifos):
+        self.axi = axi
+        self.csr = csr
+        self.fifos = fifos
+        self.read_inst = Method(o=[('inst', 48)])
+        self.inst_started = Method()
+        self.inst_stopped = Method()
+        self.trig_timeout = Method()
+
+    def elaborate(self, plat):
+        m = TModule()
+        fifos = self.fifos
+
+        transfer_count = Signal(8)
+        running = Signal()
+        underflow = Signal()
+        trig_timeout = Signal()
+        underflow_armed = Signal()
+        cmd_empty = Signal(init=1)
+        cmd_full = Signal(init=0)
+        m.d.sync += [cmd_empty.eq(fifos.spi_cmd_fifo.empty & fifos.dds0_cmd_fifo.empty &
+                                  fifos.dds1_cmd_fifo.empty),
+                     cmd_full.eq(fifos.spi_cmd_fifo.full | fifos.dds0_cmd_fifo.full |
+                                 fifos.dds1_cmd_fifo.full)]
+
+        dma_status = DMAStatus(self.csr.dma_status)
+        reg_chain(m, input=running, output=dma_status.running, levels=2)
+        reg_chain(m, input=underflow, output=dma_status.underflow, levels=2)
+        reg_chain(m, input=transfer_count, output=dma_status.transfer_count, levels=2)
+        reg_chain(m, input=trig_timeout, output=dma_status.trig_timeout, levels=2)
+        reg_chain(m, input=cmd_empty, output=dma_status.cmd_empty, levels=2)
+        reg_chain(m, input=cmd_full, output=dma_status.cmd_full, levels=2)
+
+        # Address has to be 128bytes aligned, each block cannot cross 1 MB boundary
+        align_width = 7
+        m.submodules.axi_stream = axi_stream = AXIReadStream(self.axi, 16, 10,
+                                                             max_width=20,
+                                                             align_width=align_width)
+
+        with Transaction().body(m):
+            cmd = fifos.dma_cmd_fifo.read(m)
+            axi_stream.queue(m, addr=cmd.addr, blocks=cmd.blocks)
+            with m.If(cmd.first):
+                m.d.sync += [underflow_armed.eq(0),
+                             underflow.eq(0),
+                             trig_timeout.eq(0)]
+
+        @def_method(m, self.inst_started, nonexclusive=True)
+        def _():
+            with m.If(underflow_armed):
+                m.d.sync += underflow.eq(1)
+            m.d.sync += running.eq(1)
+
+        @def_method(m, self.inst_stopped, nonexclusive=True)
+        def _():
+            m.d.sync += [underflow_armed.eq(1),
+                         running.eq(0)]
+
+        @def_method(m, self.trig_timeout, nonexclusive=True)
+        def _():
+            m.d.sync += [trig_timeout.eq(1)]
+
+        m.submodules.inst_cutter = inst_cutter = InstCutter()
+
+        with Transaction().body(m):
+            rep = axi_stream.get(m)
+            inst_cutter.write(m, rep.data)
+            with m.If(rep.last):
+                m.d.sync += transfer_count.eq(transfer_count + 1)
+
+        self.read_inst.provide(inst_cutter.read)
 
         return m
