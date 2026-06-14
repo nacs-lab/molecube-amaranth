@@ -63,12 +63,17 @@ class CountKeeper(Elaboratable):
 
 class AXIReadStream(Elaboratable):
     def __init__(self, axi, block_len, blocks_width, max_width=None,
-                 const_user=0, const_cache=0):
+                 const_user=0, const_cache=0, align_width=None):
         self.axi = axi
         self.addr_width = len(axi.ARADDR)
         self.data_width = len(axi.RDATA)
         self.block_len = block_len
         self.blocks_width = blocks_width
+        if align_width is None:
+            align_width = exact_log2(self.data_width // 8)
+        else:
+            assert (block_len * self.data_width // 8) % (1 << align_width) == 0
+        self.align_width = align_width
         self.max_width = self.addr_width if max_width is None else max_width
         assert block_len <= 1 << len(axi.ARLEN)
         self.queue = Method(i=[('addr', self.addr_width), ('blocks', blocks_width)])
@@ -82,10 +87,11 @@ class AXIReadStream(Elaboratable):
         def inc_addr(addr):
             inc = (self.data_width // 8) * self.block_len
             low_nbits = exact_log2(inc & -inc)
-            mid_bits = addr[low_nbits:self.max_width]
+            assert low_nbits >= self.align_width
+            mid_bits = addr[low_nbits - self.align_width:self.max_width - self.align_width]
             inc_mid_bits = Signal.like(mid_bits)
-            m.d.top_comb += inc_mid_bits.eq(addr[low_nbits:self.max_width] + (inc >> low_nbits))
-            res = Cat(addr[:low_nbits], inc_mid_bits, addr[self.max_width:])
+            m.d.top_comb += inc_mid_bits.eq(mid_bits + (inc >> low_nbits))
+            res = Cat(addr[:low_nbits - self.align_width], inc_mid_bits, addr[self.max_width - self.align_width:])
             assert len(res) == len(addr)
             return res
 
@@ -101,13 +107,13 @@ class AXIReadStream(Elaboratable):
 
         m.submodules.count_keeper = count_keeper = CountKeeper(self.blocks_width)
 
-        next_addr = Signal(self.addr_width)
+        next_addr = Signal(self.addr_width - self.align_width)
 
-        request = Method(i=[('addr', self.addr_width)])
+        request = Method(i=[('addr', self.addr_width - self.align_width)])
         @def_method(m, request, combiner=oring_combiner, nonexclusive=True)
         def _(addr):
             m.d.sync += next_addr.eq(inc_addr(addr))
-            read_iface.request(m, addr=addr)
+            read_iface.request(m, addr=Cat(C(0, self.align_width), addr))
 
         req_blocks = Signal(self.blocks_width)
         with Transaction().body(m, ready=req_blocks != 0):
@@ -118,7 +124,7 @@ class AXIReadStream(Elaboratable):
         def _(addr, blocks):
             m.d.sync += req_blocks.eq(blocks)
             count_keeper.add(m, blocks)
-            request(m, addr)
+            request(m, addr[self.align_width:])
 
         @def_method(m, self.get)
         def _():
