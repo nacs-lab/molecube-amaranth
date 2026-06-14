@@ -9,10 +9,13 @@ from amaranth_zynq.ps7 import PsZynq
 from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.dma import DMAController
+from molecube_amaranth.dma_inst import DMAInstParser
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.interface import ControlInterface
 from molecube_amaranth.io import PulseIO
+
+from transactron.lib import ConnectTrans
 
 class TopLevel(Elaboratable):
     def __init__(self, config):
@@ -50,5 +53,9 @@ class TopLevel(Elaboratable):
             regs, fifos)
 
         m.submodules.dma_ctrl = dma_ctrl = DMAController(ps.SAXIHP0, regs, fifos)
+
+        m.submodules.dma_parser = dma_parser = DMAInstParser(regs, len(pulseio.ttlout.o))
+        m.submodules.dma_parser_input = ConnectTrans.create(dma_ctrl.read_inst,
+                                                            dma_parser.write)
 
         return m
