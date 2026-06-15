@@ -6,7 +6,7 @@ from amaranth.lib import io
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, SimpleTestCircuit
 
-from molecube_amaranth.fifo import CommandFifo, ResultFifo
+from molecube_amaranth.fifo import CommandFifo, ResultFifo, BufferedFifo
 
 import pytest
 import random
@@ -89,3 +89,28 @@ class TestFifos(TestCaseWithSimulator):
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
+
+    def test_fifo(self):
+        fifo = BufferedFifo([('data', 12), ('data2', 3)], 16)
+        circ = SimpleTestCircuit(fifo)
+
+        datas = [dict(data=random.randint(0, (1 << 12) - 1),
+                      data2=random.randint(0, (1 << 3) - 1)) for _ in range(100)]
+
+        async def producer(sim):
+            for data in datas:
+                for _ in range(random.randint(0, 2)):
+                    await sim.tick()
+                await circ.write.call(sim, **data)
+
+        async def consumer(sim):
+            for data in datas:
+                for _ in range(random.randint(0, 2)):
+                    await sim.tick()
+                res = await circ.read.call(sim)
+                assert res.data == data['data']
+                assert res.data2 == data['data2']
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)

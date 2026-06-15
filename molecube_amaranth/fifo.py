@@ -5,6 +5,7 @@ from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.lib.fifo import SyncFIFOBuffered, FIFOInterface
 from amaranth.lib.memory import Memory
+from amaranth.lib.data import View
 
 from amaranth_axi.adaptors import InAdaptor, OutAdaptor
 
@@ -97,6 +98,35 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
         m.d.comb += [
             self.level.eq(inner_level + self.r_rdy),
         ]
+
+        return m
+
+
+class BufferedFifo(Elaboratable):
+    def __init__(self, layout, depth):
+        self.depth = depth
+        self.write = Method(i=layout)
+        self.read = Method(o=layout)
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        layout = self.write.layout_in
+
+        m.submodules.fifo = fifo = SyncFIFOBuffered(width=layout.size,
+                                                    depth=self.depth)
+        m.submodules.in_adaptor = in_adaptor = InAdaptor.from_signal(
+            ready=fifo.r_en, valid=fifo.r_rdy, data=View(layout, fifo.r_data))
+        m.submodules.out_adaptor = out_adaptor = OutAdaptor.from_signal(
+            ready=fifo.w_rdy, valid=fifo.w_en, data=View(layout, fifo.w_data))
+
+        @def_method(m, self.read)
+        def _():
+            return in_adaptor.input(m)
+
+        @def_method(m, self.write)
+        def _(arg):
+            out_adaptor.output(m, arg)
 
         return m
 
