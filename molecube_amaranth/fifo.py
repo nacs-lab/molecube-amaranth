@@ -11,6 +11,8 @@ from amaranth_axi.adaptors import InAdaptor, OutAdaptor
 
 from transactron import TModule, Transaction, Method, def_method
 
+from .dds import SET_ARG as DDS_SET_ARG
+from .inst_runner import SPI_DECODE0 as SPI_ARG
 from .utils import oring_combiner
 
 def _incr(signal, modulo):
@@ -243,15 +245,54 @@ class ResultFifo(Elaboratable):
         return m
 
 
+class DMACmdFifo(Elaboratable):
+    # Start address has to be page (4k) aligned
+    def __init__(self, *, addr_width=32, align_width=12):
+        self.write = Method(i=[('addr', addr_width), ('blocks', 10), ('first', 1)])
+        self.read = Method(o=[('addr', addr_width), ('blocks', 10), ('first', 1)])
+        self.addr_width = addr_width
+        self.align_width = align_width
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        m.submodules.fifo = fifo = BufferedFifo([('addr',
+                                                 self.addr_width - self.align_width),
+                                                 ('blocks', 10), ('first', 1)], 9)
+
+        @def_method(m, self.write)
+        def _(addr, blocks, first):
+            fifo.write(m, addr=addr[self.align_width:], blocks=blocks, first=first)
+
+        @def_method(m, self.read)
+        def _():
+            cmd = fifo.read(m)
+            return dict(addr=Cat(C(0, self.align_width), cmd.addr),
+                        blocks=cmd.blocks, first=cmd.first)
+
+        return m
+
+
 class Fifos(Elaboratable):
-    def __init__(self, data_width):
+    def __init__(self, data_width, *, dma_addr_width=32, dma_align_width=12):
         self.cmd_fifo = CommandFifo(data_width, 4099)
+        self.cmd2_fifo = CommandFifo(data_width, 19)
+        self.spi_cmd_fifo = BufferedFifo(SPI_ARG, 7)
+        self.dds0_cmd_fifo = BufferedFifo(DDS_SET_ARG, 35)
+        self.dds1_cmd_fifo = BufferedFifo(DDS_SET_ARG, 35)
         self.result_fifo = ResultFifo(data_width, 515)
+        self.dma_cmd_fifo = DMACmdFifo(addr_width=dma_addr_width,
+                                       align_width=dma_align_width)
 
     def elaborate(self, plat):
         m = TModule()
 
         m.submodules.cmd_fifo = self.cmd_fifo
+        m.submodules.cmd2_fifo = self.cmd2_fifo
+        m.submodules.spi_cmd_fifo = self.spi_cmd_fifo
+        m.submodules.dds0_cmd_fifo = self.dds0_cmd_fifo
+        m.submodules.dds1_cmd_fifo = self.dds1_cmd_fifo
         m.submodules.result_fifo = self.result_fifo
+        m.submodules.dma_cmd_fifo = self.dma_cmd_fifo
 
         return m

@@ -6,7 +6,7 @@ from amaranth.lib import io
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, SimpleTestCircuit
 
-from molecube_amaranth.fifo import CommandFifo, ResultFifo, BufferedFifo
+from molecube_amaranth.fifo import CommandFifo, ResultFifo, DMACmdFifo, BufferedFifo, Fifos
 
 import pytest
 import random
@@ -90,6 +90,33 @@ class TestFifos(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
+    def test_dma_cmd_fifo(self):
+        fifo = DMACmdFifo()
+        circ = SimpleTestCircuit(fifo)
+
+        cmds = [dict(addr=random.randint(0, (1 << 32) - 1),
+                     blocks=random.randint(0, (1 << 10) - 1),
+                     first=random.randint(0, 1)) for _ in range(100)]
+
+        async def producer(sim):
+            for cmd in cmds:
+                for _ in range(random.randint(0, 2)):
+                    await sim.tick()
+                await circ.write.call(sim, **cmd)
+
+        async def consumer(sim):
+            for cmd in cmds:
+                for _ in range(random.randint(0, 2)):
+                    await sim.tick()
+                res = await circ.read.call(sim)
+                assert res.addr == cmd['addr'] & 0xffff_f000
+                assert res.blocks == cmd['blocks']
+                assert res.first == cmd['first']
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
+
     def test_fifo(self):
         fifo = BufferedFifo([('data', 12), ('data2', 3)], 16)
         circ = SimpleTestCircuit(fifo)
@@ -114,3 +141,12 @@ class TestFifos(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
+
+    def test_dma_sidechannel_fifo(self):
+        fifos = Fifos(32)
+        assert isinstance(fifos.dds0_cmd_fifo, BufferedFifo)
+        assert isinstance(fifos.dds1_cmd_fifo, BufferedFifo)
+        assert isinstance(fifos.spi_cmd_fifo, BufferedFifo)
+
+        with self.run_simulation(fifos) as sim:
+            pass
