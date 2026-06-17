@@ -149,16 +149,12 @@ class CommandFifo(wiring.Component):
     def elaborate(self, plat):
         m = TModule()
 
-        m.submodules.fifo = fifo = SyncFIFOBuffered(width=self.data_width * 2,
-                                                    depth=self.depth - 2)
-        m.submodules.in_adaptor = in_adaptor = InAdaptor.from_signal(
-            ready=fifo.r_en, valid=fifo.r_rdy, data=fifo.r_data)
-        m.submodules.out_adaptor = out_adaptor = OutAdaptor.from_signal(
-            ready=fifo.w_rdy, valid=fifo.w_en, data=fifo.w_data)
+        m.submodules.fifo = fifo = BufferedFifo([('data', self.data_width * 2)],
+                                                 self.depth - 2)
 
         @def_method(m, self.read)
         def _():
-            return in_adaptor.input(m).DATA
+            return fifo.read(m).data
 
         has_half = Signal(1)
         half_data = Signal(self.data_width)
@@ -168,11 +164,11 @@ class CommandFifo(wiring.Component):
             m.d.sync += half_data.eq(data)
             with m.If(has_half):
                 m.d.sync += has_half.eq(0)
-                out_adaptor.output(m, Cat(half_data, data))
+                fifo.write(m, Cat(half_data, data))
             with m.Else():
                 m.d.sync += has_half.eq(1)
 
-        m.d.comb += self.full.eq(~fifo.w_rdy)
+        m.d.comb += self.full.eq(fifo.full)
 
         return m
 
