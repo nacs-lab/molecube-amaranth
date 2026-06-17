@@ -14,10 +14,14 @@ from transactron import TModule, Transaction, Method, def_method
 from .utils import oring_combiner
 
 def _incr(signal, modulo):
-    if modulo == 2 ** len(signal):
-        return signal + 1
+    n = len(signal)
+    plus1 = signal + 1
+    assert len(plus1) == n + 1
+    if modulo == 2 ** n:
+        return plus1[:n], plus1[n],
     else:
-        return Mux(signal == modulo - 1, 0, signal + 1)
+        wrap = signal == modulo - 1
+        return Mux(wrap, 0, signal + 1), wrap
 
 # This is mostly a copy of the SyncFIFOBuffered in base amaranth
 # However, the computation of the w_rdy signal is changed to be fully registered
@@ -67,7 +71,7 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
             w_port.en.eq(do_write),
         ]
         with m.If(do_write):
-            m.d.sync += produce.eq(_incr(produce, inner_depth))
+            m.d.sync += produce.eq(_incr(produce, inner_depth)[0])
 
         m.d.comb += [
             r_port.addr.eq(consume),
@@ -75,7 +79,7 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
             r_port.en.eq(do_inner_read)
         ]
         with m.If(do_inner_read):
-            m.d.sync += consume.eq(_incr(consume, inner_depth))
+            m.d.sync += consume.eq(_incr(consume, inner_depth)[0])
 
         w_rdy_topbit = inner_depth == 2 ** (len(inner_level) - 1)
         if w_rdy_topbit:
@@ -144,42 +148,50 @@ class BufferedFifo(wiring.Component):
         return m
 
 
-class CommandFifo(wiring.Component):
-    full: Out(1)
-    def __init__(self, data_width, depth):
-        super().__init__()
-        self.data_width = data_width
+class UpsizeFifo(Elaboratable):
+    def __init__(self, *, width_in, width_out, depth):
+        assert width_out % width_in == 0
+        assert width_out >= width_in
+
+        self.width_in = width_in
+        self.width_out = width_out
+        self.n = width_out // width_in
         self.depth = depth
-        self._layout_in = [('data', self.data_width)]
-        self._layout_out = [('data', self.data_width * 2)]
+
+        self._layout_in = [('data', self.width_in)]
+        self._layout_out = [('data', self.width_out)]
+        self._fifo = BufferedFifo(self._layout_out, self.depth - 2)
+
+        self.read = self._fifo.read
         self.write = Method(i=self._layout_in)
-        self.read = Method(o=self._layout_out)
+
+        for name in ('full', 'empty', 'fifo_level', 'input_level', 'output_level'):
+            setattr(self, name, getattr(self._fifo, name))
 
     def elaborate(self, plat):
         m = TModule()
 
-        m.submodules.fifo = fifo = BufferedFifo([('data', self.data_width * 2)],
-                                                 self.depth - 2)
+        m.submodules.fifo = fifo = self._fifo
 
-        @def_method(m, self.read)
-        def _():
-            return fifo.read(m).data
-
-        has_half = Signal(1)
-        half_data = Signal(self.data_width)
+        part_count = Signal(range(self.n))
+        partial_data = Signal(self.width_in * (self.n - 1))
 
         @def_method(m, self.write)
         def _(data):
-            m.d.sync += half_data.eq(data)
-            with m.If(has_half):
-                m.d.sync += has_half.eq(0)
-                fifo.write(m, Cat(half_data, data))
-            with m.Else():
-                m.d.sync += has_half.eq(1)
-
-        m.d.comb += self.full.eq(fifo.full)
+            next_count, full = _incr(part_count, self.n)
+            new_data = Cat(partial_data, data)
+            m.d.sync += [partial_data.eq(new_data[self.width_in:]),
+                         part_count.eq(next_count)]
+            with m.If(full):
+                fifo.write(m, new_data)
 
         return m
+
+
+class CommandFifo(UpsizeFifo):
+    def __init__(self, data_width, depth):
+        UpsizeFifo.__init__(self, width_in=data_width, width_out=data_width * 2,
+                            depth=depth)
 
 
 class ResultFifo(Elaboratable):
