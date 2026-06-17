@@ -102,8 +102,10 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
         return m
 
 
-class BufferedFifo(Elaboratable):
+class BufferedFifo(wiring.Component):
+    full: Out(1)
     def __init__(self, layout, depth):
+        super().__init__()
         self.depth = depth
         self.write = Method(i=layout)
         self.read = Method(o=layout)
@@ -127,6 +129,8 @@ class BufferedFifo(Elaboratable):
         @def_method(m, self.write)
         def _(arg):
             out_adaptor.output(m, arg)
+
+        m.d.comb += self.full.eq(~fifo.w_rdy)
 
         return m
 
