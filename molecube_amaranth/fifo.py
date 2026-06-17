@@ -197,23 +197,19 @@ class ResultFifo(Elaboratable):
     def elaborate(self, plat):
         m = TModule()
 
-        m.submodules.fifo = fifo = SyncFIFOBuffered(width=self.data_width,
-                                                    depth=self.depth - 2)
-        m.submodules.in_adaptor = in_adaptor = InAdaptor.from_signal(
-            ready=fifo.r_en, valid=fifo.r_rdy, data=fifo.r_data)
-        m.submodules.out_adaptor = out_adaptor = OutAdaptor.from_signal(
-            ready=fifo.w_rdy, valid=fifo.w_en, data=fifo.w_data)
+        m.submodules.fifo = fifo = BufferedFifo([('data', self.data_width)],
+                                                 self.depth - 2)
 
         # Only include the out adaptor one if the actual fifo is not empty
         # Otherwise we can't guarantee that
         # the user can actually read all of those out yet.
-        m.d.comb += self.level.eq((fifo.level + in_adaptor.LEVEL) +
-                                  (out_adaptor.LEVEL & fifo.r_rdy))
+        m.d.comb += self.level.eq((fifo.fifo_level + fifo.input_level) +
+                                  (fifo.output_level & ~fifo.empty))
 
         # Construct a fast and conservative result level for user API
-        est_level = Signal.like(fifo.level)
-        m.d.comb += est_level.eq((fifo.level + in_adaptor.LEVEL) |
-                                 (out_adaptor.LEVEL & fifo.r_rdy))
+        est_level = Signal.like(fifo.fifo_level)
+        m.d.comb += est_level.eq((fifo.fifo_level + fifo.input_level) |
+                                 (fifo.output_level & ~fifo.empty))
 
         user_len = len(self.user_level)
         user_level = est_level[:user_len]
@@ -225,13 +221,13 @@ class ResultFifo(Elaboratable):
         def _():
             read_trans = Transaction()
             with read_trans.body(m):
-                res = in_adaptor.input(m).DATA
+                res = fifo.read(m).data
             return Mux(read_trans.run, res, 0)
 
         @def_method(m, self.write, combiner=oring_combiner, nonexclusive=True)
         def _(data):
             with Transaction().body(m):
-                out_adaptor.output(m, data)
+                fifo.write(m, data)
 
         return m
 
