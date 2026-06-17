@@ -106,6 +106,7 @@ class BufferedFifo(wiring.Component):
     def __init__(self, layout, depth):
         super().__init__(dict(
             full=Out(1),
+            empty=Out(1),
             fifo_level=Out(range(depth)),
             input_level=Out(1),
             output_level=Out(1),
@@ -135,6 +136,7 @@ class BufferedFifo(wiring.Component):
             out_adaptor.output(m, arg)
 
         m.d.comb += [self.full.eq(~fifo.w_rdy),
+                     self.empty.eq(~fifo.r_rdy),
                      self.fifo_level.eq(fifo.level),
                      self.input_level.eq(in_adaptor.LEVEL),
                      self.output_level.eq(out_adaptor.LEVEL)]
