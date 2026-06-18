@@ -163,13 +163,9 @@ class ControlInterface(Elaboratable):
                     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
 
                 with m.Case(0x50):
-                    axi_write_reg(m, Cat(wr_shadow.dds_timing1,
-                                         Signal(self.data_width - len(wr_shadow.dds_timing1))),
-                                  data, strb)
+                    axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
                 with m.Case(0x51):
-                    axi_write_reg(m, Cat(wr_shadow.dds_timing2,
-                                         Signal(self.data_width - len(wr_shadow.dds_timing2))),
-                                  data, strb)
+                    axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -235,7 +231,7 @@ class ControlInterface(Elaboratable):
                 0x02: rd_shadow.timing_status,
                 0x03: rd_shadow.timing_ctrl,
                 0x04: ttl_out_reg(0),
-                0x05: C(0, self.data_width) | rd_shadow.clockout_div,
+                0x05: rd_shadow.clockout_div,
                 0x06: MAJOR_VERSION,
                 0x07: MINOR_VERSION,
                 0x10: rd_ttl_hi(1),
@@ -282,8 +278,8 @@ class ControlInterface(Elaboratable):
                 0x48: rd_shadow.dds0_reg,
                 0x49: rd_shadow.dds1_reg,
 
-                0x50: rd_shadow.dds_timing1 | C(0, self.data_width),
-                0x51: rd_shadow.dds_timing2 | C(0, self.data_width),
+                0x50: rd_shadow.dds_timing1,
+                0x51: rd_shadow.dds_timing2,
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
