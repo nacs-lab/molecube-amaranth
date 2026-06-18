@@ -215,7 +215,7 @@ class ControlInterface(Elaboratable):
             return dict(idx=idx[:self.valid_width - 2],
                         resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
 
-        @read_pipe.stage(m, o=[('data', self.data_width)])
+        @read_pipe.stage(m, o=[('fifo_data', self.data_width)])
         def _(idx, resp):
             res = Signal(self.data_width)
             with m.If((idx == 0x1f) & ~resp[0]):
@@ -223,11 +223,11 @@ class ControlInterface(Elaboratable):
                 m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
             with m.Else():
                 m.d.av_comb += res.eq(xvalue(m, self.data_width))
-            return dict(data=res)
+            return dict(fifo_data=res)
 
-        @read_pipe.stage(m)
-        def _():
-            pass
+        @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in range(self.valid_width - 2)])
+        def _(idx):
+            return {f'idx{i}': idx[i] for i in range(self.valid_width - 2)}
 
         read_regs = {
                 0x00: rd_ttl_hi(0),
@@ -286,34 +286,72 @@ class ControlInterface(Elaboratable):
                 0x51: rd_shadow.dds_timing2 | C(0, self.data_width),
         }
 
-        read_regs = list(read_regs.items())
-        nread_regs = len(read_regs)
-        batch_sz = 6
+        stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
+        stage_state[0x1f] = lambda arg: arg.fifo_data
 
-        for start_idx in range(0, nread_regs, batch_sz):
-            end_idx = min(nread_regs, start_idx + batch_sz)
-            assert start_idx != end_idx
-            @read_pipe.stage(m, o=[('data', self.data_width)])
-            def _(idx, data):
-                res = Signal(self.data_width)
-                with m.Switch(idx):
-                    with m.Case(0x1f):
-                        m.d.av_comb += res.eq(data)
-                    for i in range(start_idx):
-                        reg_idx, reg_val = read_regs[i]
-                        with m.Case(reg_idx):
-                            m.d.av_comb += res.eq(data)
-                    for i in range(start_idx, end_idx):
-                        reg_idx, reg_val = read_regs[i]
-                        with m.Case(reg_idx):
-                            m.d.av_comb += res.eq(reg_val)
-                    with m.Default():
-                        m.d.av_comb += res.eq(xvalue(m, self.data_width))
-                return dict(data=res)
+        def get_stage(arg, i):
+            if i in stage_state:
+                return stage_state[i](arg)
 
-            @read_pipe.stage(m)
-            def _():
-                pass
+        max_batch_sz = 8
+        for bit in range(self.valid_width - 2):
+            idx_out_width = self.valid_width - 2 - 1 - bit
+            next_stage_state = {}
+            for idx_out_val in range(1 << idx_out_width):
+                if ((idx_out_val * 2) in stage_state or
+                    (idx_out_val * 2 + 1) in stage_state):
+                    fld = f'data_{bit}_{idx_out_val}'
+                    next_stage_state[idx_out_val] = lambda arg, fld=fld: getattr(arg, fld)
+
+            idx_outs = list(next_stage_state.keys())
+            nidx_outs = len(idx_outs)
+            nbatches = (nidx_outs + max_batch_sz - 1) // max_batch_sz
+            batch_sz = (nidx_outs + nbatches - 1) // nbatches
+
+            if bit == 2:
+                read_pipe.fifo(depth=2)
+
+            for start_idx in range(0, nidx_outs, batch_sz):
+                end_idx = min(nidx_outs, start_idx + batch_sz)
+                idxs = idx_outs[start_idx:end_idx]
+
+                layout_in = [(f'idx{bit}', 1)]
+                layout_out = []
+
+                for idx_out_val in idxs:
+                    if idx_out_width == 0:
+                        layout_out.append(('data', self.data_width))
+                    else:
+                        layout_out.append((f'data_{bit}_{idx_out_val}', self.data_width))
+                    if bit == 0:
+                        if idx_out_val == 0x1f >> 1:
+                            layout_in.append(('fifo_data', self.data_width))
+                        continue
+                    if (idx_out_val * 2) in stage_state:
+                        layout_in.append((f'data_{bit - 1}_{idx_out_val * 2}', self.data_width))
+                    if (idx_out_val * 2 + 1) in stage_state:
+                        layout_in.append((f'data_{bit - 1}_{idx_out_val * 2 + 1}', self.data_width))
+
+                @read_pipe.stage(m, i=layout_in, o=layout_out)
+                def _(arg):
+                    res = {}
+                    idx_bit = getattr(arg, f'idx{bit}')
+                    for idx_out_val in idxs:
+                        v0 = get_stage(arg, idx_out_val * 2)
+                        v1 = get_stage(arg, idx_out_val * 2 + 1)
+                        if idx_out_width == 0:
+                            fld = 'data'
+                        else:
+                            fld = f'data_{bit}_{idx_out_val}'
+                        if v0 is None:
+                            res[fld] = v1
+                        elif v1 is None:
+                            res[fld] = v0
+                        else:
+                            res[fld] = Mux(idx_bit, v1, v0)
+                    return res
+
+            stage_state = next_stage_state
 
         read_pipe.fifo(depth=2)
 
