@@ -44,6 +44,8 @@ class ControlInterface(Elaboratable):
         for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
                          'dds_timing1', 'dds_timing2', 'loopback']:
             real_reg = getattr(csr, reg_name)
+            if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
+                real_reg = real_reg[:self.ioctrl.nttlout]
             rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             _, wr_reg = reg_chain(m, output=real_reg, levels=2)
             setattr(wr_shadow, reg_name, wr_reg)

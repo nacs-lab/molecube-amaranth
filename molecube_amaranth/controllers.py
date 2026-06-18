@@ -14,6 +14,7 @@ class IOController(Elaboratable):
         self.spi = SPIController(pulseio.spi, fifos.result_fifo, div_width=8 + clock_shift)
         self.dds0 = DDSController(pulseio.dds0, fifos.result_fifo, csr, bus_id=0)
         self.dds1 = DDSController(pulseio.dds1, fifos.result_fifo, csr, bus_id=1)
+        self.nttlout = len(pulseio.ttlout.o)
         self.ttlout = TTLOutController(pulseio.ttlout, csr,
                                        delay=1 if clock_shift == 0 else 0)
 

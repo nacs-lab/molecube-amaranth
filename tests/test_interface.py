@@ -97,18 +97,18 @@ class InterfaceWrapper(Elaboratable):
             0x03: self.csr.timing_ctrl,
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),
-            0x12: self.ttl_hi_reg(2),
-            0x13: self.ttl_lo_reg(2),
-            0x14: self.ttl_hi_reg(3),
-            0x15: self.ttl_lo_reg(3),
-            0x16: self.ttl_hi_reg(4),
-            0x17: self.ttl_lo_reg(4),
-            0x18: self.ttl_hi_reg(5),
-            0x19: self.ttl_lo_reg(5),
-            0x1a: self.ttl_hi_reg(6),
-            0x1b: self.ttl_lo_reg(6),
-            0x1c: self.ttl_hi_reg(7),
-            0x1d: self.ttl_lo_reg(7),
+            # 0x12: self.ttl_hi_reg(2),
+            # 0x13: self.ttl_lo_reg(2),
+            # 0x14: self.ttl_hi_reg(3),
+            # 0x15: self.ttl_lo_reg(3),
+            # 0x16: self.ttl_hi_reg(4),
+            # 0x17: self.ttl_lo_reg(4),
+            # 0x18: self.ttl_hi_reg(5),
+            # 0x19: self.ttl_lo_reg(5),
+            # 0x1a: self.ttl_hi_reg(6),
+            # 0x1b: self.ttl_lo_reg(6),
+            # 0x1c: self.ttl_hi_reg(7),
+            # 0x1d: self.ttl_lo_reg(7),
             0x1e: self.csr.loopback,
 
             0x50: self.csr.dds_timing1,
@@ -279,7 +279,10 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            masks[idx] = (1 << len(reg)) - 1
+            if idx in (0x10, 0x11):
+                masks[idx] = (1 << 24) - 1
+            else:
+                masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
@@ -315,7 +318,10 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            masks[idx] = (1 << len(reg)) - 1
+            if idx in (0x10, 0x11):
+                masks[idx] = (1 << 24) - 1
+            else:
+                masks[idx] = (1 << len(reg)) - 1
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 
