@@ -13,6 +13,12 @@ from .config import MAJOR_VERSION, MINOR_VERSION
 from .csr import Registers
 from .utils import xvalue, reg_chain
 
+def relaxed_read_shadow(m, reg):
+    r2 = Signal.like(reg)
+    r2.attrs["molecube.vivado.false_path_to"] = "TRUE"
+    m.d.sync += r2.eq(reg)
+    return r2
+
 class ControlInterface(Elaboratable):
     def __init__(self, axi, csr_regs, fifos, ioctrl, prefix=0, valid_width=None):
         self.axi = axi
@@ -46,7 +52,11 @@ class ControlInterface(Elaboratable):
             real_reg = getattr(csr, reg_name)
             if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
                 real_reg = real_reg[:self.ioctrl.nttlout]
-            rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
+            if reg_name in ('ttl_hi_mask', 'ttl_lo_mask', 'dds_timing1',
+                            'dds_timing2', 'loopback'):
+                rd_reg = relaxed_read_shadow(m, real_reg)
+            else:
+                rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             _, wr_reg = reg_chain(m, output=real_reg, levels=2)
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
@@ -54,13 +64,15 @@ class ControlInterface(Elaboratable):
         for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
                          'dds0_reg', 'dds1_reg']:
             real_reg = getattr(csr, reg_name)
-            rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
+            if reg_name in ('ttl_out', 'clockout_div', 'dbg_result_count',
+                            'dds0_reg', 'dds1_reg'):
+                rd_reg = relaxed_read_shadow(m, real_reg)
+            else:
+                rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
             setattr(rd_shadow, reg_name, rd_reg)
 
         for (k, c) in csr.all_counters.items():
-            cv = c.value
-            rd_reg, _ = reg_chain(m, input=cv, levels=2)
-            setattr(rd_shadow, k, rd_reg)
+            setattr(rd_shadow, k, relaxed_read_shadow(m, c.value))
 
         def rd_ttl_hi(idx):
             return rd_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]

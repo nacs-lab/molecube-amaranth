@@ -77,6 +77,11 @@ class Registers(Elaboratable):
                                self.dds_read_rdhoz,
                                self.dds_reset_rshd)
 
+        for r in (self.dds_write_adsu, self.dds_write_wrlow, self.dds_write_adhd,
+                  self.dds_write_fuddl, self.dds_write_fudhd, self.dds_read_asu,
+                  self.dds_read_rdl, self.dds_read_rdhoz, self.dds_reset_rshd):
+            r.attrs["molecube.vivado.false_path_from"] = "TRUE"
+
         self.dbg_result_count = Signal(self.REG_WIDTH)
 
         self.all_counters = dict(
