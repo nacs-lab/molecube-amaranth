@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: molecube-amaranth
+Version: 0.1.dev2+ge1a5e0d7c
+Summary: NaCs FPGA experiment control, amaranth port
+Author-email: Yichao Yu <yyc1992@gmail.com>
+Project-URL: Source Code, https://github.com/yuyichao/molecube-amaranth
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: amaranth~=0.5.0
+Requires-Dist: transactron~=0.6.1
+Requires-Dist: amaranth-axi @ git+https://github.com/yuyichao/amaranth-axi
+Requires-Dist: amaranth-zynq @ git+https://github.com/yuyichao/amaranth-zynq
+Requires-Dist: xilinx_ps_config @ git+https://github.com/yuyichao/xilinx_ps_config
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-xdist>=3.5.0; extra == "dev"
+Requires-Dist: hypothesis>=6.99.6; extra == "dev"
