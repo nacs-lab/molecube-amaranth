@@ -79,10 +79,14 @@ class Registers(Elaboratable):
 
         self.dds_reset_rshd = Signal(5, init=dds_cycle(config.DDS_RESET_RSHD_2)) # ReSet HolD cycle - 1
 
-        for r in (self.dds_write_adsu, self.dds_write_wrlow, self.dds_write_adhd,
-                  self.dds_write_fuddl, self.dds_write_fudhd, self.dds_read_asu,
-                  self.dds_read_rdl, self.dds_read_rdhoz, self.dds_reset_rshd):
+        for name in ('dds_write_adsu', 'dds_write_wrlow', 'dds_write_adhd',
+                     'dds_write_fuddl', 'dds_write_fudhd', 'dds_read_asu',
+                     'dds_read_rdl', 'dds_read_rdhoz', 'dds_reset_rshd'):
+            r = getattr(self, name)
+            r0 = Signal(name=f'{name}_iszero')
+            setattr(self, f'{name}_iszero', r0)
             r.attrs["molecube.vivado.false_path_from"] = "TRUE"
+            r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
 
         self.dbg_result_count = Signal(self.REG_WIDTH)
 
@@ -128,5 +132,12 @@ class Registers(Elaboratable):
 
         for (k, v) in self.all_counters.items():
             setattr(m.submodules, k, v)
+
+        for name in ('dds_write_adsu', 'dds_write_wrlow', 'dds_write_adhd',
+                     'dds_write_fuddl', 'dds_write_fudhd', 'dds_read_asu',
+                     'dds_read_rdl', 'dds_read_rdhoz', 'dds_reset_rshd'):
+            r = getattr(self, name)
+            r0 = getattr(self, f'{name}_iszero')
+            m.d.sync += r0.eq(r == 0)
 
         return m
