@@ -272,18 +272,6 @@ class InstRunner(Elaboratable):
 
         read_decoded = decode_pipe.create_external(o=DECODED_INST, i=[])
 
-        def should_wait(cycle):
-            if self.clock_shift > 0:
-                return 1
-            # cycle >= 1
-            return (cycle >> 1) != 0
-
-        def start_wait(cycle):
-            cycle = cycle << self.clock_shift
-            m.d.sync += wait_cycle.eq(cycle)
-            with m.If(should_wait(cycle)):
-                m.d.sync += state.eq(RunState.WAIT)
-
         # We usually don't put 0 or 1 in `wait_cycle` during waiting
         # and we'll branch out on `wait_cycle == 2` so when we check for wait ending
         # we'll never deal with 0 or 1, we can therefore skip checking the second bit
