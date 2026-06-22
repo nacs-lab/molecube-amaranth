@@ -291,7 +291,13 @@ class InstRunner(Elaboratable):
         # For clock_shift == 1, we may put 0 in there.
         # However, in this case, we actually do want it to behave like wait_cycle == 2
         # to match the clock_shift == 1 behavior so the check still works.
-        wait_end = ((wait_cycle >> 2) == 0) & (wait_cycle[0] == 0)
+        #
+        # wait_end_reg is the registered version of ((wait_cycle >> 2) == 0) & (wait_cycle[0] == 0).
+        # It is pre-computed one cycle ahead to remove the wide comparator from the
+        # register-to-register critical timing path of the state transitions.
+        # Updated in FETCH (from new instruction timer) and in each counting state
+        # (from wait_cycle - 1 will be 0 or 2, i.e. current wait_cycle is 1 or 3).
+        wait_end_reg = Signal(1)
 
         exe_inst = Signal(DECODED_INST)
         exe_trig_enable = Signal(1)
@@ -315,6 +321,13 @@ class InstRunner(Elaboratable):
                                  trig_chn.eq(new_inst.wait.trig_chn),
                                  wait_cycle.eq(new_inst.timer << self.clock_shift)]
 
+                    # Pre-compute wait_end_reg for the EXECUTE state that follows.
+                    # wait_end_reg = ((timer << clock_shift) >> 2 == 0) & ~(timer << clock_shift)[0]
+                    # = the incoming wait_cycle (timer << clock_shift) is 0 or 2.
+                    next_wait = Signal(24 + self.clock_shift)
+                    m.d.comb += next_wait.eq(new_inst.timer << self.clock_shift)
+                    m.d.sync += wait_end_reg.eq(((next_wait >> 2) == 0) & ~next_wait[0])
+
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
                             self.csr.dbg_ttl_count.count(m)
@@ -336,7 +349,10 @@ class InstRunner(Elaboratable):
 
             with m.Case(RunState.EXECUTE):
                 m.d.sync += [wait_cycle.eq(wait_cycle - 1),
-                             state.eq(RunState.WAIT)]
+                             state.eq(RunState.WAIT),
+                             # Pre-compute wait_end_reg for WAIT: will (wait_cycle-1) be 0 or 2?
+                             # Equivalent to: is current wait_cycle == 1 or 3?
+                             wait_end_reg.eq((wait_cycle[2:] == 0) & wait_cycle[0])]
 
                 with m.Switch(exe_inst.op):
                     with m.Case(InstOpCode.TTL):
@@ -382,27 +398,30 @@ class InstRunner(Elaboratable):
                                            id=exe_inst.spi.id,
                                            clk_pha=exe_inst.spi.clk_pha,
                                            clk_pol=exe_inst.spi.clk_pol)
-                with m.If(wait_end):
+                with m.If(wait_end_reg):
                     m.d.sync += state.eq(RunState.FETCH)
 
             with m.Case(RunState.WAIT):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
-                with m.If(wait_end):
+                m.d.sync += [wait_cycle.eq(wait_cycle - 1),
+                             wait_end_reg.eq((wait_cycle[2:] == 0) & wait_cycle[0])]
+                with m.If(wait_end_reg):
                     m.d.sync += state.eq(RunState.FETCH)
 
             with m.Case(RunState.TRIG_INIT):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
+                m.d.sync += [wait_cycle.eq(wait_cycle - 1),
+                             wait_end_reg.eq((wait_cycle[2:] == 0) & wait_cycle[0])]
                 with m.If(trig_ttl == trig_lower_edge):
                     m.d.sync += state.eq(RunState.TRIG_ARMED)
-                with m.Elif(wait_end):
+                with m.Elif(wait_end_reg):
                     m.d.sync += [state.eq(RunState.FETCH),
                                  trigger_timeout.eq(1)]
 
             with m.Case(RunState.TRIG_ARMED):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
+                m.d.sync += [wait_cycle.eq(wait_cycle - 1),
+                             wait_end_reg.eq((wait_cycle[2:] == 0) & wait_cycle[0])]
                 with m.If(trig_ttl != trig_lower_edge):
                     m.d.sync += state.eq(RunState.FETCH)
-                with m.Elif(wait_end):
+                with m.Elif(wait_end_reg):
                     m.d.sync += [state.eq(RunState.FETCH),
                                  trigger_timeout.eq(1)]
 
