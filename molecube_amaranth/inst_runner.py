@@ -99,7 +99,8 @@ DECODED_INST = StructLayout(dict(op=InstOpCode,
                                  clockout=8,
                                  spi=SPI_DECODE0,
                                  time_check=1,
-                                 timer=24))
+                                 timer=24,
+                                 timer_end=1))
 TIME_STATUS_STRUCT = FlexibleLayout(32, dict(
     underflow=Field(unsigned(1), 0),
     trigger_timeout=Field(unsigned(1), 1),
@@ -240,13 +241,23 @@ class InstRunner(Elaboratable):
                              spi.clk_pol.eq(spiarg.clk_pol)]
 
             timer = Signal(24)
+            timer_end = Signal()
+
+            # Compute (timer << self.clock_shift) <= 2
+            def compute_timer_end(timer):
+                if self.clock_shift == 0:
+                    return timer <= 2
+                return timer[1:] == 0
+
             with m.Switch(inst.opcode):
                 with m.Case(InstOpCode.TTL):
-                    m.d.av_comb += timer.eq(ttlarg.timer)
+                    m.d.av_comb += [timer.eq(ttlarg.timer),
+                                    timer_end.eq(compute_timer_end(ttlarg.timer))]
                 with m.Case(InstOpCode.DDS):
                     m.d.av_comb += timer.eq(50)
                 with m.Case(InstOpCode.WAIT):
-                    m.d.av_comb += timer.eq(waitarg.timer)
+                    m.d.av_comb += [timer.eq(waitarg.timer),
+                                    timer_end.eq(compute_timer_end(waitarg.timer))]
                 with m.Case(InstOpCode.CLEAR_UNDERFLOW):
                     m.d.av_comb += timer.eq(5)
                 with m.Case(InstOpCode.LOOPBACK):
@@ -260,7 +271,7 @@ class InstRunner(Elaboratable):
 
             return dict(op=op, ttl=ttl, dds=dds, wait=wait, loopback=loopback,
                         clockout=clockout_div, spi=spi,
-                        time_check=inst.time_check, timer=timer)
+                        time_check=inst.time_check, timer=timer, timer_end=timer_end)
 
         decode_pipe.fifo(depth=2)
 
@@ -272,14 +283,14 @@ class InstRunner(Elaboratable):
 
         read_decoded = decode_pipe.create_external(o=DECODED_INST, i=[])
 
-        # We usually don't put 0 or 1 in `wait_cycle` during waiting
-        # and we'll branch out on `wait_cycle == 2` so when we check for wait ending
-        # we'll never deal with 0 or 1, we can therefore skip checking the second bit
-        # in the number when checking for `wait_cycle == 2`
-        # For clock_shift == 1, we may put 0 in there.
-        # However, in this case, we actually do want it to behave like wait_cycle == 2
-        # to match the clock_shift == 1 behavior so the check still works.
-        wait_end = ((wait_cycle >> 2) == 0) & (wait_cycle[0] == 0)
+        wait_end = Signal()
+        def dec_wait():
+            # The branch out condition is `wait_cycle == 2`
+            # which means the pre-decrement value is `wait_cycle == 3`
+            # or `wait_cycle < 4`.
+            # In another word, it's when the top bits of the counter is zero.
+            m.d.sync += [wait_cycle.eq(wait_cycle - 1),
+                         wait_end.eq(wait_cycle[2:] == 0)]
 
         exe_inst = Signal(DECODED_INST)
         exe_trig_enable = Signal(1)
@@ -301,7 +312,8 @@ class InstRunner(Elaboratable):
                     m.d.sync += [exe_trig_enable.eq(trig_type != 0),
                                  trig_lower_edge.eq(trig_type & 1),
                                  trig_chn.eq(new_inst.wait.trig_chn),
-                                 wait_cycle.eq(new_inst.timer << self.clock_shift)]
+                                 wait_cycle.eq(new_inst.timer << self.clock_shift),
+                                 wait_end.eq(new_inst.timer_end)]
 
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
@@ -323,8 +335,8 @@ class InstRunner(Elaboratable):
                         m.d.sync += underflow.eq(1)
 
             with m.Case(RunState.EXECUTE):
-                m.d.sync += [wait_cycle.eq(wait_cycle - 1),
-                             state.eq(RunState.WAIT)]
+                dec_wait()
+                m.d.sync += state.eq(RunState.WAIT)
 
                 with m.Switch(exe_inst.op):
                     with m.Case(InstOpCode.TTL):
@@ -374,12 +386,12 @@ class InstRunner(Elaboratable):
                     m.d.sync += state.eq(RunState.FETCH)
 
             with m.Case(RunState.WAIT):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
+                dec_wait()
                 with m.If(wait_end):
                     m.d.sync += state.eq(RunState.FETCH)
 
             with m.Case(RunState.TRIG_INIT):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
+                dec_wait()
                 with m.If(trig_ttl == trig_lower_edge):
                     m.d.sync += state.eq(RunState.TRIG_ARMED)
                 with m.Elif(wait_end):
@@ -387,7 +399,7 @@ class InstRunner(Elaboratable):
                                  trigger_timeout.eq(1)]
 
             with m.Case(RunState.TRIG_ARMED):
-                m.d.sync += wait_cycle.eq(wait_cycle - 1)
+                dec_wait()
                 with m.If(trig_ttl != trig_lower_edge):
                     m.d.sync += state.eq(RunState.FETCH)
                 with m.Elif(wait_end):
@@ -411,8 +423,9 @@ class InstRunner(Elaboratable):
             self.csr.dbg_result_consumed.clear(m)
             # self.csr.dbg_ttl_cycle.clear(m)
             # self.csr.dbg_wait_cycle.clear(m)
+            assign_xvalue(m, wait_cycle)
+            assign_xvalue(m, wait_end)
             m.d.sync += [state.eq(RunState.FETCH),
-                         wait_cycle.eq(0),
                          check_timing.eq(0),
                          underflow.eq(0),
                          trigger_timeout.eq(0),
