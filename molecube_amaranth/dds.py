@@ -31,7 +31,7 @@ class FSMState(enum.Enum):
 SET_ARG = StructLayout(dict(
     state=FSMState,
     id=4,
-    hold_cnt=6,
+    hold_cnt=5,
     read=1,
     reset=1,
     fud=1,
@@ -48,14 +48,14 @@ class DDSReq:
     def write1(self, m, *, id, addr1, data1, fud=1):
         return dict(state=FSMState.WR_ADSETUP2,
                     id=id,
-                    hold_cnt=self.csr.dds_write_adsu,
+                    hold_cnt=Cat(self.csr.dds_write_adsu, C(0, 2)),
                     read=0, reset=0, fud=fud,
                     addr1=addr1, data1=data1, addr2=xvalue(m, 6), data2=xvalue(m, 16))
 
     def write2(self, m, *, id, addr1, data1, addr2, data2, fud=1):
         return dict(state=FSMState.WR_ADSETUP1,
                     id=id,
-                    hold_cnt=self.csr.dds_write_adsu,
+                    hold_cnt=Cat(self.csr.dds_write_adsu, C(0, 2)),
                     read=0, reset=0, fud=fud,
                     addr1=addr1, data1=data1, addr2=addr2, data2=data2)
 
@@ -147,7 +147,7 @@ class DDSController(Elaboratable):
                      ddsio.cs.o.eq(~dds_cs)]
 
         fsm_state = Signal(FSMState)
-        hold_cnt = Signal(6)
+        hold_cnt = Signal(5)
 
         dds_next_addr = Signal(6)
         dds_next_data = Signal(16)

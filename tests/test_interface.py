@@ -29,6 +29,19 @@ def update_data(old_data, data, strb):
             data = (data & ~bytemask) | (old_data & bytemask)
     return data
 
+def reg_mask(idx, reg):
+    if idx in (0x10, 0x11):
+        # ttl hi/lo mask bank 1
+        return (1 << 24) - 1
+    elif idx == 0x50:
+        # dds timing 1
+        return 0x071c71c7
+    elif idx == 0x51:
+        # dds timing 2
+        return 0x007df7df
+    else:
+        return (1 << len(reg)) - 1
+
 class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9, clock_shift=1):
         config = Config(CLOCK_SHIFT=clock_shift)
@@ -279,10 +292,7 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            if idx in (0x10, 0x11):
-                masks[idx] = (1 << 24) - 1
-            else:
-                masks[idx] = (1 << len(reg)) - 1
+            masks[idx] = reg_mask(idx, reg)
             vals[idx] = Const.cast(get_init(reg)).value
 
         async def f(sim):
@@ -318,10 +328,7 @@ class TestInterface(TestCaseWithSimulator):
         masks = {}
         vals = {}
         for idx, reg in iface.read_write_regs.items():
-            if idx in (0x10, 0x11):
-                masks[idx] = (1 << 24) - 1
-            else:
-                masks[idx] = (1 << len(reg)) - 1
+            masks[idx] = reg_mask(idx, reg)
             vals[idx] = Const.cast(get_init(reg)).value
         idxs = list(vals.keys())
 

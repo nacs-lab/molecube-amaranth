@@ -6,6 +6,18 @@ from amaranth.lib.wiring import In, Out
 
 from transactron import TModule, Method, def_method
 
+def cast_to_width(s, width, allow_trunc=False):
+    s = Value.cast(s)
+    l = len(s)
+    if l == width:
+        return s
+    elif l > width:
+        if not allow_trunc:
+            raise TypeError("Signal truncation not allowed")
+        return s[:width]
+    else:
+        return Cat(s, Signal(width - l))
+
 class Counter(wiring.Component):
     def __init__(self, width):
         super().__init__({'value': Out(width)})
@@ -54,28 +66,18 @@ class Registers(Elaboratable):
         def dds_cycle(cycle_2):
             return (cycle_2 >> (1 - config.CLOCK_SHIFT)) - 1
 
-        self.dds_write_adsu = Signal(6, init=dds_cycle(config.DDS_WRITE_ADSU_2)) # Address/Data SetUp cycles - 1
-        self.dds_write_wrlow = Signal(6, init=dds_cycle(config.DDS_WRITE_WRLOW_2)) # WRite enable LOW (assert) cycles - 1
-        self.dds_write_adhd = Signal(6, init=dds_cycle(config.DDS_WRITE_ADHD_2)) # Address/Data HolD cycles - 1
-        self.dds_write_fuddl = Signal(6, init=dds_cycle(config.DDS_WRITE_FUDDL_2)) # FUD DeLay cycles - 1
-        self.dds_write_fudhd = Signal(6, init=dds_cycle(config.DDS_WRITE_FUDHD_2)) # FUD HolD cycle - 1
-        self.dds_timing1 = Cat(self.dds_write_adsu,
-                               self.dds_write_wrlow,
-                               self.dds_write_adhd,
-                               self.dds_write_fuddl,
-                               self.dds_write_fudhd)
+        self.dds_write_adsu = Signal(3, init=dds_cycle(config.DDS_WRITE_ADSU_2)) # Address/Data SetUp cycles - 1
+        self.dds_write_wrlow = Signal(3, init=dds_cycle(config.DDS_WRITE_WRLOW_2)) # WRite enable LOW (assert) cycles - 1
+        self.dds_write_adhd = Signal(3, init=dds_cycle(config.DDS_WRITE_ADHD_2)) # Address/Data HolD cycles - 1
+        self.dds_write_fuddl = Signal(3, init=dds_cycle(config.DDS_WRITE_FUDDL_2)) # FUD DeLay cycles - 1
+        self.dds_write_fudhd = Signal(3, init=dds_cycle(config.DDS_WRITE_FUDHD_2)) # FUD HolD cycle - 1
 
 
-        self.dds_read_asu = Signal(6, init=dds_cycle(config.DDS_READ_ASU_2)) # Address SetUp cycle - 1
-        self.dds_read_rdl = Signal(6, init=dds_cycle(config.DDS_READ_RDL_2)) # Read re-init DeLay cycle - 1
-        self.dds_read_rdhoz = Signal(6, init=dds_cycle(config.DDS_READ_RDHOZ_2)) # ReaD enable High to Output high-Z cycle - 1
+        self.dds_read_asu = Signal(5, init=dds_cycle(config.DDS_READ_ASU_2)) # Address SetUp cycle - 1
+        self.dds_read_rdl = Signal(5, init=dds_cycle(config.DDS_READ_RDL_2)) # Read re-init DeLay cycle - 1
+        self.dds_read_rdhoz = Signal(5, init=dds_cycle(config.DDS_READ_RDHOZ_2)) # ReaD enable High to Output high-Z cycle - 1
 
-        self.dds_reset_rshd = Signal(6, init=dds_cycle(config.DDS_RESET_RSHD_2)) # ReSet HolD cycle - 1
-
-        self.dds_timing2 = Cat(self.dds_read_asu,
-                               self.dds_read_rdl,
-                               self.dds_read_rdhoz,
-                               self.dds_reset_rshd)
+        self.dds_reset_rshd = Signal(5, init=dds_cycle(config.DDS_RESET_RSHD_2)) # ReSet HolD cycle - 1
 
         for r in (self.dds_write_adsu, self.dds_write_wrlow, self.dds_write_adhd,
                   self.dds_write_fuddl, self.dds_write_fudhd, self.dds_read_asu,
@@ -105,6 +107,21 @@ class Registers(Elaboratable):
 
         for (k, v) in self.all_counters.items():
             setattr(self, k, v)
+
+    @property
+    def dds_timing1(self):
+        return Cat(cast_to_width(self.dds_write_adsu, 6),
+                   cast_to_width(self.dds_write_wrlow, 6),
+                   cast_to_width(self.dds_write_adhd, 6),
+                   cast_to_width(self.dds_write_fuddl, 6),
+                   cast_to_width(self.dds_write_fudhd, 6))
+
+    @property
+    def dds_timing2(self):
+        return Cat(cast_to_width(self.dds_read_asu, 6),
+                   cast_to_width(self.dds_read_rdl, 6),
+                   cast_to_width(self.dds_read_rdhoz, 6),
+                   cast_to_width(self.dds_reset_rshd, 6))
 
     def elaborate(self, m):
         m = TModule()

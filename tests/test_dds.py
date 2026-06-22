@@ -252,7 +252,7 @@ class TestDDS(TestCaseWithSimulator):
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
 
-    @pytest.mark.parametrize("rshd", [0, 32])
+    @pytest.mark.parametrize("rshd", [0, 31])
     def test_reset(self, rshd):
         circ = DDSControllerTester()
 

@@ -49,15 +49,23 @@ class ControlInterface(Elaboratable):
 
         for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
                          'dds_timing1', 'dds_timing2', 'loopback']:
-            real_reg = getattr(csr, reg_name)
             if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
-                real_reg = real_reg[:self.ioctrl.nttlout]
+                rd_real_reg = wr_real_reg = getattr(csr, reg_name)[:self.ioctrl.nttlout]
+            elif reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
+                # Let the property getter return different padding registers for read/write
+                rd_real_reg = getattr(csr, reg_name)
+                wr_real_reg = getattr(csr, reg_name)
+            else:
+                rd_real_reg = wr_real_reg = getattr(csr, reg_name)
+            if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
+                rd_real_reg = rd_real_reg[:self.ioctrl.nttlout]
+                wr_real_reg = wr_real_reg[:self.ioctrl.nttlout]
             if reg_name in ('ttl_hi_mask', 'ttl_lo_mask', 'dds_timing1',
                             'dds_timing2', 'loopback'):
-                rd_reg = relaxed_read_shadow(m, real_reg)
+                rd_reg = relaxed_read_shadow(m, rd_real_reg)
             else:
-                rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
-            _, wr_reg = reg_chain(m, output=real_reg, levels=2)
+                rd_reg, _ = reg_chain(m, input=rd_real_reg, levels=2)
+            _, wr_reg = reg_chain(m, output=wr_real_reg, levels=2)
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
