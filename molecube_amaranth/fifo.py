@@ -37,7 +37,6 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
         assert self.depth > 1
 
         do_write = self.w_rdy & self.w_en
-        do_read = self.r_rdy & self.r_en
 
         m.d.comb += [
             self.w_level.eq(self.level),
