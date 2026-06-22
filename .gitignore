@@ -38,3 +38,5 @@ __pycache__/
 *.lz4
 *.b64
 *.bin
+
+*.egg-info/
