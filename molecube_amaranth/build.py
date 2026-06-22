@@ -24,12 +24,16 @@ foreach cell [get_cells -quiet -hier -filter {molecube.vivado.false_path_to == "
                       # before routing after placing
                       script_after_place="""
 phys_opt_design -directive AggressiveExplore
+phys_opt_design -directive AggressiveFanoutOpt
+phys_opt_design -directive AlternateReplication
 """,
                       # Run an extra physical optimization pass
                       # for fan-out and hold fixing
                       # before the phys_opt_design already present in the template
                       script_after_route="""
+phys_opt_design -directive AggressiveExplore
 phys_opt_design -directive AggressiveFanoutOpt
+phys_opt_design -directive AlternateReplication
 """)
     if not do_build:
         plan.extract(build_dir)
