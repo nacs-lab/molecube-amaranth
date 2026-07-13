@@ -371,7 +371,6 @@ class InstRunner(Elaboratable):
                         with Transaction().body(m):
                             self.csr.dbg_clock_count.count(m)
                             ioctrl.clockout.set(m, shift_cycle_m1(exe_inst.clockout))
-                        m.d.sync += self.csr.clockout_div.eq(exe_inst.clockout)
                     with m.Case(InstOpCode.SPI):
                         with Transaction().body(m):
                             self.csr.dbg_spi_count.count(m)
@@ -430,7 +429,6 @@ class InstRunner(Elaboratable):
                          underflow.eq(0),
                          trigger_timeout.eq(0),
                          pulses_finished.eq(1),
-                         force_release.eq(0),
-                         self.csr.clockout_div.eq(255)]
+                         force_release.eq(0)]
 
         return m
