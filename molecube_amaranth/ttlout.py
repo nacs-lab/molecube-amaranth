@@ -19,6 +19,7 @@ class TTLOutController(Elaboratable):
         self.bank_width = ceil_log2(self.nttls) - 5
 
         self.set_bank_inst = Method(i=[('bank', self.bank_width), ('value', 32)])
+        self.set_mask = Method(i=[('mask', self.nttls), ('value', self.nttls)])
 
         for bank in range(8):
             setattr(self, f'set_bank_user{bank}', Method(i=[('byte', 2), ('hi', 8), ('lo', 8)]))
@@ -105,5 +106,9 @@ class TTLOutController(Elaboratable):
         @def_method(m, self.set_bank_inst, combiner=oring_combiner, nonexclusive=True)
         def _(bank, value):
             m.d.sync += ttl_banks[bank].eq(value)
+
+        @def_method(m, self.set_mask, singlecaller=True)
+        def _(mask, value):
+            m.d.sync += ttl_out.eq((ttl_out & ~mask) | value)
 
         return m

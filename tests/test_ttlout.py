@@ -28,6 +28,7 @@ class TTLOutControllerTester(Elaboratable):
 
         self.set_byte_user = _TestbenchIO(AdapterTrans.create(self._set_byte_user))
         self.set_bank_inst = _TestbenchIO(AdapterTrans.create(self.ttlout.set_bank_inst))
+        self.set_mask = _TestbenchIO(AdapterTrans.create(self.ttlout.set_mask))
 
     def elaborate(self, _):
         m = TModule()
@@ -46,6 +47,7 @@ class TTLOutControllerTester(Elaboratable):
 
         m.submodules.set_bank_inst = self.set_bank_inst
         m.submodules.set_byte_user = self.set_byte_user
+        m.submodules.set_mask = self.set_mask
 
         return m
 
@@ -83,6 +85,9 @@ class TTLChecker:
         mask = ~(0xff << (byte * 8))
         self._ttl_out_reg = (self._ttl_out_reg & mask) | ((value << (byte * 8)) & ((1 << 56) - 1))
 
+    def set_mask(self, mask, value):
+        self._ttl_out_reg = (self._ttl_out_reg & ~mask) | value
+
 class TestTTLOut(TestCaseWithSimulator):
     @pytest.mark.parametrize("delay", [0, 1])
     def test_set_inst(self, delay):
@@ -95,6 +100,24 @@ class TestTTLOut(TestCaseWithSimulator):
                 value = random.randint(0, 0xffff_ffff)
                 await circ.set_bank_inst.call(sim, bank=bank, value=value)
                 checker.set_bank(bank, value)
+                assert sim.get(circ.csr.ttl_out) == checker.ttl_out_reg
+                assert sim.get(circ.pulseio.ttlout_port.o) == checker.ttl_out_io
+                checker.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)
+
+    @pytest.mark.parametrize("delay", [0, 1])
+    def test_set_mask(self, delay):
+        circ = TTLOutControllerTester(delay)
+        checker = TTLChecker(delay)
+
+        async def f(sim):
+            for _ in range(1000):
+                mask = random.randint(0, 0xff_ffff_ffff_ffff)
+                value = random.randint(0, 0xff_ffff_ffff_ffff) & mask
+                await circ.set_mask.call(sim, mask=mask, value=value)
+                checker.set_mask(mask, value)
                 assert sim.get(circ.csr.ttl_out) == checker.ttl_out_reg
                 assert sim.get(circ.pulseio.ttlout_port.o) == checker.ttl_out_io
                 checker.tick()
