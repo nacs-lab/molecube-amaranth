@@ -126,6 +126,9 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x04):
                     self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
                                                       byte=data[16:18])
+                with m.Case(0x05):
+                    self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
+                                                    data[:8]))
 
                 with m.Case(0x10):
                     axi_write_reg(m, wr_ttl_hi(1), data, strb)

@@ -42,6 +42,11 @@ def reg_mask(idx, reg):
     else:
         return (1 << len(reg)) - 1
 
+def rand_strb(idx):
+    if idx == 0x5:
+        return 1
+    return random.randint(0, 0xf)
+
 class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9, clock_shift=1):
         config = Config(CLOCK_SHIFT=clock_shift)
@@ -74,7 +79,6 @@ class InterfaceWrapper(Elaboratable):
         self.read_only_regs = {
             0x02: self.csr.timing_status,
             # 0x04: self.ttl_out_reg(0),
-            0x05: self.csr.clockout_div,
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
             0x20: self.csr.dbg_inst_word_count.value,
@@ -108,6 +112,7 @@ class InterfaceWrapper(Elaboratable):
             0x00: self.ttl_hi_reg(0),
             0x01: self.ttl_lo_reg(0),
             0x03: self.csr.timing_ctrl,
+            0x05: self.csr.clockout_div,
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),
             # 0x12: self.ttl_hi_reg(2),
@@ -299,7 +304,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(5):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
-                    strb = random.randint(0, 0xf)
+                    strb = rand_strb(idx)
                     assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                                strb=strb,
                                                                data=data)) is not None
@@ -338,7 +343,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(ncycles):
                 idx = random.choice(idxs)
                 data = random.randint(0, 0xffff_ffff)
-                strb = random.randint(0, 0xf)
+                strb = rand_strb(idx)
                 assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                            strb=strb,
                                                            data=data)) is not None

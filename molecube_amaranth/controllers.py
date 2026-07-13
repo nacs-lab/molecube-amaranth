@@ -10,6 +10,7 @@ from .ttlout import TTLOutController
 
 class IOController(Elaboratable):
     def __init__(self, pulseio, csr, fifos, *, clock_shift):
+        self.clock_shift = clock_shift
         self.clockout = ClockOutController(pulseio.clockout, csr,
                                            div_width=8 + clock_shift)
         self.spi = SPIController(pulseio.spi, fifos.result_fifo, div_width=8 + clock_shift)
