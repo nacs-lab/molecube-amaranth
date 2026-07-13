@@ -6,13 +6,14 @@ from amaranth.lib.data import Struct, Union, ArrayLayout, View
 from amaranth.utils import ceil_log2
 
 from transactron import TModule, Transaction, Method
-from transactron.lib import PipelineBuilder
+from transactron.lib import PipelineBuilder, Connect
 
 from amaranth_axi.utils import StructCat
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import BufferedFifo
 from .utils import assign_xvalue
+from .trigger import TriggerController
 
 # Instruction format:
 #   [len: 2][opcode: 2][data: 12/28/44]
@@ -414,5 +415,110 @@ class DMAInstParser(Elaboratable):
                     assign_xvalue(m, output_cache)
 
         self.read.provide(decoded_fifo.read)
+
+        return m
+
+
+class DMAInstRunner(Elaboratable):
+    def __init__(self, pulseio, csr, ioctrl, dmactrl):
+        self.pulseio = pulseio
+        self.csr = csr
+        self.ioctrl = ioctrl
+        self.dmactrl = dmactrl
+
+        nttl = len(pulseio.ttlout.o)
+        TTLDecode = _TTLDecode(nttl)
+        OutputAction = _OutputAction(nttl)
+        self.TTLDecode = TTLDecode
+        self.OutputAction = OutputAction
+        self.write = Method(i=[('is_trig', 1), ('wait', WaitAction),
+                               ('action', OutputAction)])
+        self.long_wait = Signal()
+
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        m.submodules.inst_conn = inst_conn = Connect([('is_trig', 1),
+                                                      ('wait', WaitAction),
+                                                      ('action', self.OutputAction)])
+        self.write.provide(inst_conn.write)
+
+        m.submodules.trig_ctrl = trig_ctrl = TriggerController(self.pulseio.ttlin, 35)
+
+        class State(enum.Enum):
+            FETCH = 0
+            WAIT = 1
+            TRIG = 2
+        state = Signal(State)
+        idling = Signal(init=1)
+        m.d.sync += idling.eq(0)
+
+        output_action = Signal(self.OutputAction)
+        counter = Signal(28)
+        output_en = Signal()
+        with Transaction().body(m, ready=output_en):
+            with m.If(output_action.clockout_en):
+                self.ioctrl.clockout.set(m, output_action.clockout.period)
+
+            with m.If(output_action.ttl_en):
+                self.ioctrl.ttlout.set_mask(m, mask=output_action.ttl.mask,
+                                            value=output_action.ttl.val)
+
+            with m.If(output_action.dds0_en):
+                self.ioctrl.dds0.set(m, output_action.dds0)
+
+            with m.If(output_action.dds1_en):
+                self.ioctrl.dds1.set(m, output_action.dds1)
+
+            with m.If(output_action.dac_en):
+                dac = output_action.dac
+                self.ioctrl.spi.set(m, data=dac.data << (32 - 18),
+                                    div=dac.cycle, nbits_minus_1=17,
+                                    result=0, id=dac.id, clk_pha=dac.clk_pha,
+                                    clk_pol=dac.clk_pol)
+
+        with m.Switch(state):
+            with m.Case(State.FETCH):
+                assign_xvalue(m, counter)
+                fetch_trans = Transaction()
+                with fetch_trans.body(m):
+                    req = inst_conn.read(m)
+                    m.d.sync += [output_action.eq(req.action),
+                                 output_en.eq(1)]
+                    wait = req.wait.wait
+                    with m.If(idling):
+                        self.dmactrl.inst_started(m)
+                    with m.If(req.is_trig):
+                        wait_trig = req.wait.wait_trig
+                        trig_ctrl.setup(m, chn=wait_trig.chn, edge=wait_trig.edge,
+                                        cycle=wait_trig.cycle)
+                        m.d.sync += state.eq(State.TRIG)
+                    with m.Elif(~wait.is0):
+                        m.d.sync += [counter.eq(wait.cycle - 1),
+                                     state.eq(State.WAIT)]
+                with m.If(~fetch_trans.run):
+                    m.d.sync += [idling.eq(1),
+                                 output_en.eq(0)]
+                    assign_xvalue(m, output_action)
+                    with Transaction().body(m, ready=~idling):
+                        self.dmactrl.inst_stopped(m)
+
+            with m.Case(State.WAIT):
+                assign_xvalue(m, output_action)
+                m.d.sync += [counter.eq(counter - 1),
+                             output_en.eq(0),
+                             self.long_wait.eq(counter[7:] != 0)] # > 128 cycles
+                with m.If(counter == 0):
+                    m.d.sync += state.eq(State.FETCH)
+
+            with m.Case(State.TRIG):
+                m.d.sync += output_en.eq(0)
+                assign_xvalue(m, output_action)
+                assign_xvalue(m, counter)
+                with Transaction().body(m):
+                    with m.If(trig_ctrl.wait(m).timeout):
+                        self.dmactrl.trig_timeout(m)
+                    m.d.sync += state.eq(State.FETCH)
 
         return m

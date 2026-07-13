@@ -80,46 +80,48 @@ class ClockoutChecker:
 
 class DDSChecker:
     def __init__(self, pulseio, csr):
-        self.__dds_cmd = None
+        self.__dds_cmds = [None, None]
         self.__pulseio = pulseio
         self.__csr = csr
 
+    def __dds_cmd(self, id, **kws):
+        if id >= 11:
+            bus_id = 1
+            id -= 11
+        else:
+            bus_id = 0
+        self.__dds_cmds[bus_id] = dict(id=id, **kws)
+
     def dds_set_freq(self, id, freq, fud=1):
-        self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
-                              addr2=0x2f, data2=freq >> 16, fud=fud)
+        self.__dds_cmd(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
+                       addr2=0x2f, data2=freq >> 16, fud=fud)
 
     def dds_set_amp_phase(self, id, amp, phase, fud=1):
-        self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x33, data1=amp,
-                              addr2=0x31, data2=phase, fud=fud)
+        self.__dds_cmd(cmd='set2', id=id, addr1=0x33, data1=amp,
+                       addr2=0x31, data2=phase, fud=fud)
 
     def dds_set_two_bytes(self, id, addr, data, fud=1):
-        self.__dds_cmd = dict(cmd='set1', id=id, addr1=addr + 1, data1=data, fud=fud)
+        self.__dds_cmd(cmd='set1', id=id, addr1=addr + 1, data1=data, fud=fud)
 
     def dds_set_four_bytes(self, id, addr, data, fud=1):
-        self.__dds_cmd = dict(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
-                              addr2=addr + 3, data2=data >> 16, fud=fud)
+        self.__dds_cmd(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
+                       addr2=addr + 3, data2=data >> 16, fud=fud)
 
     def dds_reset(self, id):
-        self.__dds_cmd = dict(cmd='reset', id=id)
+        self.__dds_cmd(cmd='reset', id=id)
 
     def dds_get_two_bytes(self, id, addr, data):
-        self.__dds_cmd = dict(cmd='get1', id=id, addr=addr + 1, data=data)
+        self.__dds_cmd(cmd='get1', id=id, addr=addr + 1, data=data)
 
     def dds_get_four_bytes(self, id, addr, data):
-        self.__dds_cmd = dict(cmd='get2', id=id, addr=addr + 1, data=data)
+        self.__dds_cmd(cmd='get2', id=id, addr=addr + 1, data=data)
 
     def __get_dds_cmd(self, bank):
-        if self.__dds_cmd is None:
+        if self.__dds_cmds[bank] is None:
             return
-        cmd = self.__dds_cmd
-        id = cmd['id']
-        if bank == 0 and id < 11:
-            self.__dds_cmd = None
-            return cmd
-        if bank == 1 and id >= 11:
-            self.__dds_cmd = None
-            cmd['id'] = id - 11
-            return cmd
+        cmd = self.__dds_cmds[bank]
+        self.__dds_cmds[bank] = None
+        return cmd
 
     async def __check_dds_cmd(self, sim, bank, port):
         # Make sure we see the command added by user coroutine

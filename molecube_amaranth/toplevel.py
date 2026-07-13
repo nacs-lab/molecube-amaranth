@@ -9,7 +9,7 @@ from amaranth_zynq.ps7 import PsZynq
 from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.dma import DMAController
-from molecube_amaranth.dma_inst import DMAInstParser
+from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.interface import ControlInterface
@@ -57,5 +57,8 @@ class TopLevel(Elaboratable):
         m.submodules.dma_parser = dma_parser = DMAInstParser(regs, len(pulseio.ttlout.o))
         m.submodules.dma_parser_input = ConnectTrans.create(dma_ctrl.read_inst,
                                                             dma_parser.write)
+
+        m.submodules.dma_runner = dma_runner = DMAInstRunner(pulseio, regs,
+                                                             ioctrl, dma_ctrl)
 
         return m
