@@ -182,15 +182,14 @@ class ControlInterface(Elaboratable):
                     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
                                                       byte=data[16:18])
 
-                with m.Case(0x48):
-                    self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-                with m.Case(0x49):
-                    self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-
                 with m.Case(0x50):
                     axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
                 with m.Case(0x51):
                     axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
+                with m.Case(0x52):
+                    self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                with m.Case(0x53):
+                    self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -300,11 +299,10 @@ class ControlInterface(Elaboratable):
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
 
-                0x48: rd_shadow.dds0_reg,
-                0x49: rd_shadow.dds1_reg,
-
                 0x50: rd_shadow.dds_timing1,
                 0x51: rd_shadow.dds_timing2,
+                0x52: rd_shadow.dds0_reg,
+                0x53: rd_shadow.dds1_reg,
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
