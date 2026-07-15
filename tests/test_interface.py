@@ -312,7 +312,7 @@ class TestInterface(TestCaseWithSimulator):
                     for _ in range(3):
                         await sim.tick()
                     assert (await iface.write_reply.call_try(sim)) is not None
-                    for _ in range(3):
+                    for _ in range(4):
                         await sim.tick()
                     assert sim.get(reg) == data
 

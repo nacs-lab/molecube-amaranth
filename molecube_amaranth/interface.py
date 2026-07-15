@@ -160,6 +160,10 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_ttl_lo(7), data, strb)
                 with m.Case(0x1e):
                     axi_write_reg(m, wr_shadow.loopback, data, strb)
+
+        @write_pipe.stage(m)
+        def _(idx, data, strb):
+            with m.Switch(idx):
                 with m.Case(0x40):
                     self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
                                                       byte=data[16:18])
