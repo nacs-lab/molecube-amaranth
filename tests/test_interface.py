@@ -21,6 +21,8 @@ from molecube_amaranth.io import PulseIO
 import pytest
 import random
 
+READ_LATENCY = 26
+
 def update_data(old_data, data, strb):
     for i in range(4):
         bitmask = 1 << i
@@ -30,8 +32,8 @@ def update_data(old_data, data, strb):
     return data
 
 def reg_mask(idx, reg):
-    if idx in (0x10, 0x11):
-        # ttl hi/lo mask bank 1
+    if idx in (0x10, 0x11, 0x49):
+        # ttl hi/lo mask, dma ttl mask bank 1
         return (1 << 24) - 1
     elif idx == 0x50:
         # dds timing 1
@@ -74,7 +76,9 @@ class InterfaceWrapper(Elaboratable):
         self.write_reply = _TestbenchIO(AdapterTrans.create(self._write_reply))
 
         self.read_inst = _TestbenchIO(AdapterTrans.create(self.fifos.cmd_fifo.read))
+        self.read_inst2 = _TestbenchIO(AdapterTrans.create(self.fifos.cmd2_fifo.read))
         self.write_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.write))
+        self.read_dma_cmd = _TestbenchIO(AdapterTrans.create(self.fifos.dma_cmd_fifo.read))
 
         self.read_only_regs = {
             0x02: self.csr.timing_status,
@@ -106,6 +110,7 @@ class InterfaceWrapper(Elaboratable):
             # 0x44: self.ttl_out_reg(5),
             # 0x45: self.ttl_out_reg(6),
             # 0x46: self.ttl_out_reg(7),
+            0x58: self.csr.dma_status,
         }
 
         self.read_write_regs = {
@@ -129,8 +134,19 @@ class InterfaceWrapper(Elaboratable):
             # 0x1d: self.ttl_lo_reg(7),
             0x1e: self.csr.loopback,
 
+            0x48: self.dma_ttl_reg(0),
+            0x49: self.dma_ttl_reg(1),
+            # 0x4a: self.dma_ttl_reg(2),
+            # 0x4b: self.dma_ttl_reg(3),
+            # 0x4c: self.dma_ttl_reg(4),
+            # 0x4d: self.dma_ttl_reg(5),
+            # 0x4e: self.dma_ttl_reg(6),
+            # 0x4f: self.dma_ttl_reg(7),
+
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
+
+            0x59: Signal.cast(self.csr.dma_ctrl),
         }
 
     def ttl_out_reg(self, idx):
@@ -141,6 +157,9 @@ class InterfaceWrapper(Elaboratable):
 
     def ttl_lo_reg(self, idx):
         return self.csr.ttl_lo_mask[idx * 32:(idx + 1) * 32]
+
+    def dma_ttl_reg(self, idx):
+        return self.csr.dma_ttl_mask[idx * 32:(idx + 1) * 32]
 
     def randomize_read_only_regs(self, sim):
         vals = {}
@@ -193,7 +212,9 @@ class InterfaceWrapper(Elaboratable):
         m.submodules.write_reply = self.write_reply
 
         m.submodules.read_inst = self.read_inst
+        m.submodules.read_inst2 = self.read_inst2
         m.submodules.write_result = self.write_result
+        m.submodules.read_dma_cmd = self.read_dma_cmd
 
         return m
 
@@ -252,7 +273,7 @@ class TestInterface(TestCaseWithSimulator):
                 await sim.tick()
                 for idx, val in vals.items():
                     assert (await iface.read_request.call_try(sim, addr=idx * 4)) is not None
-                    for _ in range(25):
+                    for _ in range(READ_LATENCY):
                         await sim.tick()
                     assert (await iface.read_reply.call_try(sim)).data == val
 
@@ -317,7 +338,7 @@ class TestInterface(TestCaseWithSimulator):
                     assert sim.get(reg) == data
 
                     assert (await iface.read_request.call_try(sim, addr=idx * 4)) is not None
-                    for _ in range(25):
+                    for _ in range(READ_LATENCY):
                         await sim.tick()
                     assert (await iface.read_reply.call_try(sim)).data == data
 
@@ -398,7 +419,7 @@ class TestInterface(TestCaseWithSimulator):
 
             for bank, idx in enumerate(idxs):
                 assert (await iface.read_request.call_try(sim, addr=idx * 4)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == (ttl_val >> (bank * 32)) & 0xffff_ffff
 
@@ -408,12 +429,33 @@ class TestInterface(TestCaseWithSimulator):
             sim.add_testbench(f)
 
     @pytest.mark.parametrize("addr_width", [9, 20])
-    def test_write_command(self, addr_width):
+    @pytest.mark.parametrize("dma_enable", [False, True])
+    def test_write_command(self, addr_width, dma_enable):
         iface = InterfaceWrapper(addr_width=addr_width)
         written = []
         start_reading = False
 
+        if dma_enable:
+            read_inst = iface.read_inst2
+            cmd_fifo = iface.fifos.cmd2_fifo
+            min_write_len = 15
+        else:
+            read_inst = iface.read_inst
+            cmd_fifo = iface.fifos.cmd_fifo
+            min_write_len = 2000
+
         async def producer(sim):
+            if dma_enable:
+                assert (await iface.write_request.call_try(sim, addr=0x59 * 4,
+                                                           strb=1, data=1)) is not None
+                for _ in range(8):
+                    await sim.tick()
+                assert sim.get(iface.csr.dma_ctrl.enabled) == 1
+                for _ in range(3):
+                    await sim.tick()
+            else:
+                assert sim.get(iface.csr.dma_ctrl.enabled) == 0
+
             nonlocal start_reading
             while True:
                 data = random.randint(0, 0xffff_ffff)
@@ -421,8 +463,8 @@ class TestInterface(TestCaseWithSimulator):
                                                        strb=0xf, data=data)) is None:
                     break
                 written.append(data)
-            assert len(written) > 2000
-            assert sim.get(iface.fifos.cmd_fifo.full) == 1
+            assert len(written) > min_write_len
+            assert sim.get(cmd_fifo.full) == 1
             start_reading = True
             if len(written) % 2 != 0:
                 data = random.randint(0, 0xffff_ffff)
@@ -430,9 +472,11 @@ class TestInterface(TestCaseWithSimulator):
                 await iface.write_request.call(sim, addr=0x1f * 4, strb=0xf, data=data)
 
         async def receiver(sim):
+            if dma_enable:
+                await iface.write_reply.call(sim)
             await iface.write_reply.call(sim)
             reply_count = 1
-            while reply_count < iface.fifos.cmd_fifo.depth * 2:
+            while reply_count < cmd_fifo.depth * 2:
                 assert (await iface.write_reply.call_try(sim)) is not None
                 reply_count += 1
             while reply_count < len(written):
@@ -446,7 +490,7 @@ class TestInterface(TestCaseWithSimulator):
 
             read_count = 0
             while read_count * 2 < len(written):
-                inst = (await iface.read_inst.call_try(sim)).data
+                inst = (await read_inst.call_try(sim)).data
                 assert inst == written[read_count * 2] | (written[read_count * 2 + 1] << 32)
                 read_count += 1
 
@@ -465,7 +509,7 @@ class TestInterface(TestCaseWithSimulator):
             n1 = 10
             for _ in range(n1):
                 assert (await iface.read_request.call_try(sim, addr=0x1f * 4)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == 0
             assert sim.get(iface.csr.dbg_result_generated.value) == 0
@@ -485,7 +529,7 @@ class TestInterface(TestCaseWithSimulator):
 
             for i in range(n2):
                 assert (await iface.read_request.call_try(sim, addr=0x1f * 4)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == results[i]
 
@@ -494,6 +538,52 @@ class TestInterface(TestCaseWithSimulator):
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)
+
+    @pytest.mark.parametrize("addr_width", [9, 20])
+    def test_dma_command(self, addr_width):
+        iface = InterfaceWrapper(addr_width=addr_width)
+
+        cmds = [dict(addr=random.randint(0, (1 << 20) - 1) << 12,
+                     blocks=random.randint(0, (1 << 10) - 1),
+                     first=random.randint(0, 1)) for _ in range(100)]
+
+        async def producer(sim):
+            for cmd in cmds:
+                data = cmd['addr'] | (cmd['blocks'] << 1) | cmd['first']
+                assert (await iface.write_request.call_try(sim, addr=0x58 * 4, strb=0xf,
+                                                           data=data)) is not None
+
+        async def receiver(sim):
+            for i, _ in enumerate(cmds):
+                if i == 0:
+                    await iface.write_reply.call(sim)
+                else:
+                    assert (await iface.write_reply.call_try(sim)) is not None
+
+            for _ in range(10):
+                await sim.tick()
+                assert (await iface.write_reply.call_try(sim)) is None
+
+        async def consumer(sim):
+            for i, cmd in enumerate(cmds):
+                if i == 0:
+                    dma_cmd = await iface.read_dma_cmd.call(sim)
+                else:
+                    dma_cmd = await iface.read_dma_cmd.call_try(sim)
+                    assert dma_cmd is not None
+
+                assert dma_cmd.addr == cmd['addr']
+                assert dma_cmd.blocks == cmd['blocks']
+                assert dma_cmd.first == cmd['first']
+
+            for _ in range(10):
+                await sim.tick()
+                assert (await iface.read_dma_cmd.call_try(sim)) is None
+
+        with self.run_simulation(iface) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(receiver)
+            sim.add_testbench(consumer)
 
     @pytest.mark.parametrize("prefix", [0, 0x23_0000])
     def test_error(self, prefix):
@@ -504,11 +594,11 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(5):
                 while True:
                     addr = random.randint(0, valid_mask)
-                    if addr >> 2 != 0x1f:
+                    if addr >> 2 not in (0x1f, 0x58):
                         break
                 addr |= prefix
                 assert (await iface.read_request.call_try(sim, addr=addr)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).resp == 0
 
@@ -534,6 +624,7 @@ class TestInterface(TestCaseWithSimulator):
                 results.append(data)
             reg_values = {idx: sim.get(reg) for idx, reg in iface.read_write_regs.items()}
             assert (await iface.read_inst.call_try(sim)) is None
+            assert (await iface.read_dma_cmd.call_try(sim)) is None
 
             for _ in range(50):
                 while True:
@@ -541,7 +632,7 @@ class TestInterface(TestCaseWithSimulator):
                     if (addr >> 9) != (prefix >> 9):
                         break
                 assert (await iface.read_request.call_try(sim, addr=addr)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).resp == 3
 
@@ -553,13 +644,14 @@ class TestInterface(TestCaseWithSimulator):
 
             while results:
                 assert (await iface.read_request.call_try(sim, addr=0x1f * 4 | prefix)) is not None
-                for _ in range(25):
+                for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == results.pop(0)
 
             reg_values2 = {idx: sim.get(reg) for idx, reg in iface.read_write_regs.items()}
             assert reg_values2 == reg_values
             assert (await iface.read_inst.call_try(sim)) is None
+            assert (await iface.read_dma_cmd.call_try(sim)) is None
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)

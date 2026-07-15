@@ -47,9 +47,10 @@ class ControlInterface(Elaboratable):
 
         csr = self.csr_regs
 
-        for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'timing_ctrl',
-                         'dds_timing1', 'dds_timing2', 'loopback']:
-            if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
+        for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'dma_ttl_mask', 'timing_ctrl',
+                         'dds_timing1', 'dds_timing2', 'loopback', 'dma_ctrl']:
+            if (reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask' or
+                reg_name == 'dma_ttl_mask'):
                 rd_real_reg = wr_real_reg = getattr(csr, reg_name)[:self.ioctrl.nttlout]
             elif reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
                 # Let the property getter return different padding registers for read/write
@@ -57,10 +58,9 @@ class ControlInterface(Elaboratable):
                 wr_real_reg = getattr(csr, reg_name)
             else:
                 rd_real_reg = wr_real_reg = getattr(csr, reg_name)
-            if reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask':
-                rd_real_reg = rd_real_reg[:self.ioctrl.nttlout]
-                wr_real_reg = wr_real_reg[:self.ioctrl.nttlout]
-            if reg_name in ('ttl_hi_mask', 'ttl_lo_mask', 'dds_timing1',
+            wr_real_reg = Signal.cast(wr_real_reg)
+            rd_real_reg = Signal.cast(rd_real_reg)
+            if reg_name in ('ttl_hi_mask', 'ttl_lo_mask', 'dma_ttl_mask', 'dds_timing1',
                             'dds_timing2', 'loopback'):
                 rd_reg = relaxed_read_shadow(m, rd_real_reg)
             else:
@@ -70,7 +70,7 @@ class ControlInterface(Elaboratable):
             setattr(rd_shadow, reg_name, rd_reg)
 
         for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
-                         'dds0_reg', 'dds1_reg']:
+                         'dds0_reg', 'dds1_reg', 'dma_status']:
             real_reg = getattr(csr, reg_name)
             if reg_name in ('ttl_out', 'clockout_div', 'dbg_result_count',
                             'dds0_reg', 'dds1_reg'):
@@ -95,13 +95,26 @@ class ControlInterface(Elaboratable):
         def ttl_out_reg(idx):
             return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
 
+        def rd_dma_ttl(idx):
+            return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
+        def wr_dma_ttl(idx):
+            return wr_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
+
         with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
             csr.dbg_result_generated.count(m)
+
+        dma_enabled = Signal()
+        m.d.comb += dma_enabled.eq(csr.dma_ctrl.enabled)
+        dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         # Buffer for command fifo to simplify write combinational logic
         m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
         with Transaction().body(m):
-            self.fifos.cmd_fifo.write(m, cmd_pre_fifo.read(m))
+            cmd = cmd_pre_fifo.read(m)
+            with m.If(dma_enabled):
+                self.fifos.cmd2_fifo.write(m, cmd)
+            with m.Else():
+                self.fifos.cmd_fifo.write(m, cmd)
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
@@ -113,6 +126,9 @@ class ControlInterface(Elaboratable):
             with m.If(idx == 0x1f):
                 csr.dbg_inst_word_count.count(m)
                 cmd_pre_fifo.write(m, data)
+            with m.Elif(idx == 0x58):
+                self.fifos.dma_cmd_fifo.write(m, addr=Cat(C(0, 12), data[12:]),
+                                              blocks=data[1:11], first=data[0])
 
         @write_pipe.stage(m)
         def _(idx, data, strb):
@@ -185,6 +201,22 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x46):
                     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
                                                       byte=data[16:18])
+                with m.Case(0x48):
+                    axi_write_reg(m, wr_dma_ttl(0), data, strb)
+                with m.Case(0x49):
+                    axi_write_reg(m, wr_dma_ttl(1), data, strb)
+                with m.Case(0x4a):
+                    axi_write_reg(m, wr_dma_ttl(2), data, strb)
+                with m.Case(0x4b):
+                    axi_write_reg(m, wr_dma_ttl(3), data, strb)
+                with m.Case(0x4c):
+                    axi_write_reg(m, wr_dma_ttl(4), data, strb)
+                with m.Case(0x4d):
+                    axi_write_reg(m, wr_dma_ttl(5), data, strb)
+                with m.Case(0x4e):
+                    axi_write_reg(m, wr_dma_ttl(6), data, strb)
+                with m.Case(0x4f):
+                    axi_write_reg(m, wr_dma_ttl(7), data, strb)
 
                 with m.Case(0x50):
                     axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
@@ -194,6 +226,8 @@ class ControlInterface(Elaboratable):
                     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
                 with m.Case(0x53):
                     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                with m.Case(0x59):
+                    axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -303,10 +337,22 @@ class ControlInterface(Elaboratable):
                 0x45: ttl_out_reg(6),
                 0x46: ttl_out_reg(7),
 
+                0x48: rd_dma_ttl(0),
+                0x49: rd_dma_ttl(1),
+                0x4a: rd_dma_ttl(2),
+                0x4b: rd_dma_ttl(3),
+                0x4c: rd_dma_ttl(4),
+                0x4d: rd_dma_ttl(5),
+                0x4e: rd_dma_ttl(6),
+                0x4f: rd_dma_ttl(7),
+
                 0x50: rd_shadow.dds_timing1,
                 0x51: rd_shadow.dds_timing2,
                 0x52: rd_shadow.dds0_reg,
                 0x53: rd_shadow.dds1_reg,
+
+                0x58: rd_shadow.dma_status,
+                0x59: rd_shadow.dma_ctrl,
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}

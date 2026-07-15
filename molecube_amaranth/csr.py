@@ -3,6 +3,7 @@
 from amaranth import *
 from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
+from amaranth.lib.data import Struct
 
 from transactron import TModule, Method, def_method
 
@@ -48,6 +49,9 @@ class Counter(wiring.Component):
 
         return m
 
+class DMACtrl(Struct):
+    enabled: 1
+
 class Registers(Elaboratable):
     REG_WIDTH = 32
     TTL_WIDTH = 256
@@ -56,12 +60,19 @@ class Registers(Elaboratable):
         self.ttl_hi_mask = Signal(self.TTL_WIDTH)
         self.ttl_lo_mask = Signal(self.TTL_WIDTH)
         self.ttl_out = Signal(self.TTL_WIDTH)
+        self.dma_ttl_mask = Signal(self.TTL_WIDTH)
         self.timing_status = Signal(self.REG_WIDTH)
         self.timing_ctrl = Signal(self.REG_WIDTH)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
         self.loopback = Signal(self.REG_WIDTH)
         self.dds0_reg = Signal(self.REG_WIDTH)
         self.dds1_reg = Signal(self.REG_WIDTH)
+        self.dma_status = Signal(self.REG_WIDTH)
+        self.dma_ctrl = Signal(DMACtrl)
+
+        # Semistatic
+        self.dma_ttl_mask.attrs["molecube.vivado.false_path_from"] = "TRUE"
+        self.dma_ttl_mask.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         def dds_cycle(cycle_2):
             return (cycle_2 >> (1 - config.CLOCK_SHIFT)) - 1
