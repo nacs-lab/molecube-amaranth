@@ -12,6 +12,7 @@ from molecube_amaranth.dma import DMAController
 from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
+from molecube_amaranth.inst_runner import InstRunner, InstConsumer
 from molecube_amaranth.interface import ControlInterface
 from molecube_amaranth.io import PulseIO
 
@@ -60,5 +61,7 @@ class TopLevel(Elaboratable):
 
         m.submodules.dma_runner = dma_runner = DMAInstRunner(pulseio, regs,
                                                              ioctrl, dma_ctrl)
+        m.submodules.inst_consumer = InstConsumer(dma_runner.long_wait, ioctrl, fifos,
+                                                  clock_shift=self.config.CLOCK_SHIFT)
 
         return m

@@ -4,6 +4,7 @@ from amaranth import *
 
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO
+from transactron.testing.testbenchio import CallTrigger
 from transactron.lib.adapters import AdapterTrans
 
 from molecube_amaranth.csr import Registers
@@ -11,7 +12,7 @@ from molecube_amaranth.config import Config
 from molecube_amaranth.dds import FSMState as DDSFSMState
 from molecube_amaranth.io import PulseIO, sma_pin
 from molecube_amaranth.fifo import Fifos
-from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
+from molecube_amaranth.inst_runner import InstRunner, InstDispatcher, InstConsumer
 from molecube_amaranth.controllers import IOController
 
 from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker, InstBuilder, check_fields
@@ -1699,3 +1700,591 @@ class TestInstDispatcher(TestCaseWithSimulator):
             sim.add_testbench(consume_dds0)
             sim.add_testbench(consume_dds1)
             sim.add_testbench(consume_spi)
+
+
+class InstConsumerTester(Elaboratable, DDSChecker, SPIChecker):
+    def __init__(self, conf):
+        self.pulseio = PulseIO.from_config(None, conf)
+        self.csr = Registers(conf)
+        self.fifos = Fifos(32)
+        self.clock_shift = conf.CLOCK_SHIFT
+        self.ioctrl = IOController(self.pulseio, self.csr, self.fifos,
+                                   clock_shift=self.clock_shift)
+        self.enable = Signal()
+
+        self._dds_write_adsu = self.csr.dds_write_adsu.init
+        self._dds_reset_rshd = self.csr.dds_reset_rshd.init
+        self._dds_read_asu = self.csr.dds_read_asu.init
+
+        self.dds_set1_cycle = (self.csr.dds_write_adsu.init + 1 +
+                               self.csr.dds_write_wrlow.init + 1 +
+                               self.csr.dds_write_fuddl.init + 1 +
+                               self.csr.dds_write_fudhd.init + 1)
+        self.dds_set2_cycle = ((self.csr.dds_write_adsu.init + 1) * 2 +
+                               (self.csr.dds_write_wrlow.init + 1) * 2 +
+                               self.csr.dds_write_adhd.init + 1 +
+                               self.csr.dds_write_fuddl.init + 1 +
+                               self.csr.dds_write_fudhd.init + 1)
+        self.dds_reset_cycle = self.csr.dds_reset_rshd.init + 1
+        self.dds_get1_cycle = (self.csr.dds_read_asu.init + 1 +
+                               self.csr.dds_read_rdhoz.init + 1)
+        self.dds_get2_cycle = ((self.csr.dds_read_asu.init + 1) * 2 +
+                               self.csr.dds_read_rdl.init + 1 +
+                               self.csr.dds_read_rdhoz.init + 1)
+
+        self.write_dds0 = _TestbenchIO(AdapterTrans.create(self.fifos.dds0_cmd_fifo.write))
+        self.write_dds1 = _TestbenchIO(AdapterTrans.create(self.fifos.dds1_cmd_fifo.write))
+        self.write_spi = _TestbenchIO(AdapterTrans.create(self.fifos.spi_cmd_fifo.write))
+        self.read_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.read))
+
+        self.dds0_queue = []
+        self.dds1_queue = []
+        self.spi_queue = []
+
+        self.dds0_check_queue = []
+        self.dds1_check_queue = []
+        self.spi_check_queue = []
+
+        DDSChecker.__init__(self, self.pulseio, self.csr,
+                            (self.ioctrl.dds0, self.ioctrl.dds1))
+        SPIChecker.__init__(self, self.pulseio, self.csr, self.ioctrl.spi)
+
+    def elaborate(self, _):
+        m = TModule()
+
+        m.submodules.pulseio = self.pulseio
+        m.submodules.csr = self.csr
+        m.submodules.fifos = self.fifos
+        m.submodules.ioctrl = self.ioctrl
+        m.submodules.inst_consumer = InstConsumer(self.enable, self.ioctrl, self.fifos,
+                                                  clock_shift=self.clock_shift)
+        m.submodules.write_dds0 = self.write_dds0
+        m.submodules.write_dds1 = self.write_dds1
+        m.submodules.write_spi = self.write_spi
+        m.submodules.read_result = self.read_result
+
+        return m
+
+    def add_testbenches(self, sim):
+        sim.add_testbench(self.check_dds0, background=True)
+        sim.add_testbench(self.check_dds1, background=True)
+        sim.add_testbench(self.check_spi, background=True)
+
+    async def queue_cmd(self, sim):
+        trig = CallTrigger(sim)
+        if self.dds0_queue:
+            trig = trig.call(self.write_dds0, **self.dds0_queue[0])
+        if self.dds1_queue:
+            trig = trig.call(self.write_dds1, **self.dds1_queue[0])
+        if self.spi_queue:
+            trig = trig.call(self.write_spi, **self.spi_queue[0])
+        res = await trig.until_done()
+        if self.dds0_queue:
+            dds0_res, *res = res
+            if dds0_res is not None:
+                self.dds0_queue.pop(0)
+        if self.dds1_queue:
+            dds1_res, *res = res
+            if dds1_res is not None:
+                self.dds1_queue.pop(0)
+        if self.spi_queue:
+            spi_res, *res = res
+            if spi_res is not None:
+                self.spi_queue.pop(0)
+        assert not res
+        return bool(self.dds0_queue or self.dds1_queue or self.spi_queue)
+
+    async def queue_all_cmd(self, sim):
+        while await self.queue_cmd(sim):
+            pass
+
+    def _add_dds_queue(self, **data):
+        id = data['id']
+        if id < 11:
+            self.dds0_queue.append(data)
+        else:
+            data['id'] = id - 11
+            self.dds1_queue.append(data)
+
+    def _add_dds_check_queue(self, **data):
+        id = data['id']
+        if id < 11:
+            self.dds0_check_queue.append(data)
+        else:
+            self.dds1_check_queue.append(data)
+
+    def _dds_write1(self, *, id, addr1, data1, fud=1):
+        self._add_dds_queue(state=DDSFSMState.WR_ADSETUP2.value,
+                            id=id,
+                            hold_cnt=self._dds_write_adsu,
+                            hold_end=self._dds_write_adsu == 0,
+                            read=0, reset=0, fud=fud,
+                            addr1=addr1, data1=data1)
+        self._add_dds_check_queue(id=id, cmd='set1', addr1=addr1 << 1, data1=data1, fud=fud)
+
+    def _dds_write2(self, *, id, addr1, data1, addr2, data2, fud=1):
+        self._add_dds_queue(state=DDSFSMState.WR_ADSETUP1.value,
+                            id=id,
+                            hold_cnt=self._dds_write_adsu,
+                            hold_end=self._dds_write_adsu == 0,
+                            read=0, reset=0, fud=fud,
+                            addr1=addr1, data1=data1, addr2=addr2, data2=data2)
+        self._add_dds_check_queue(id=id, cmd='set2', addr1=addr1 << 1, data1=data1,
+                                  addr2=addr2 << 1, data2=data2, fud=fud)
+
+    def rand_dds_set_freq(self, *, id=range(22)):
+        id = random.choice(id)
+        freq = random.randint(0, 0xffff_ffff)
+        timecheck = random.randint(0, 1)
+        self._dds_write2(id=id, addr1=0x2d >> 1, data1=freq & 0xffff,
+                         addr2=0x2f >> 1, data2=freq >> 16)
+
+    def rand_dds_set_amp_phase(self, *, id=range(22)):
+        id = random.choice(id)
+        amp = random.randint(0, 0xfff)
+        phase = random.randint(0, 0xffff)
+        self._dds_write2(id=id, addr1=0x33 >> 1, data1=amp,
+                         addr2=0x31 >> 1, data2=phase)
+
+    def rand_dds_set_two_bytes(self, *, id=range(22)):
+        id = random.choice(id)
+        addr = random.randint(0, 0x3f)
+        data = random.randint(0, 0xffff)
+        self._dds_write1(id=id, addr1=addr, data1=data)
+
+    def rand_dds_set_four_bytes(self, *, id=range(22)):
+        id = random.choice(id)
+        addr = random.randint(0, 0x1f) << 1
+        data = random.randint(0, 0xffff_ffff)
+        addr_2 = addr | 1
+        self._dds_write2(id=id, addr1=addr, data1=data & 0xffff,
+                         addr2=addr_2, data2=data >> 16)
+
+    def rand_dds_reset(self, *, id=range(22)):
+        id = random.choice(id)
+        self._add_dds_queue(state=DDSFSMState.RESET.value,
+                            id=id, hold_cnt=self._dds_reset_rshd,
+                            hold_end=self._dds_reset_rshd == 0,
+                            read=0, reset=1,
+                            addr1=0, data1=0)
+        self._add_dds_check_queue(id=id, cmd='reset')
+
+    def rand_dds_get_two_bytes(self, *, id=range(22)):
+        id = random.choice(id)
+        addr = random.randint(0, 0x3f)
+        data = random.randint(0, 0xffff)
+        self._add_dds_queue(state=DDSFSMState.RD_ASETUP2.value,
+                            id=id,
+                            hold_cnt=self._dds_read_asu,
+                            hold_end=self._dds_read_asu == 0,
+                            read=1, reset=0,
+                            addr1=addr, data1=0, data2=0)
+        self._add_dds_check_queue(id=id, cmd='get1', addr=addr << 1, data=data)
+
+    def rand_dds_get_four_bytes(self, *, id=range(22)):
+        id = random.choice(id)
+        addr = random.randint(0, 0x1f) << 1
+        addr_2 = addr | 1
+        data = random.randint(0, 0xffff_ffff)
+        self._add_dds_queue(state=DDSFSMState.RD_ASETUP1.value,
+                            id=id,
+                            hold_cnt=self._dds_read_asu,
+                            hold_end=self._dds_read_asu == 0,
+                            read=1, reset=0,
+                            addr1=addr_2, data1=0,
+                            addr2=addr)
+        self._add_dds_check_queue(id=id, cmd='get2', addr=addr << 1, data=data)
+
+    def rand_spi(self, *, div=range(0x100)):
+        id = 0
+        div = random.choice(div)
+        data = random.randint(0, (1 << 18) - 1)
+        pha = random.randint(0, 1)
+        pol = random.randint(0, 1)
+        save_result = random.randint(0, 1)
+        self.spi_queue.append(dict(data=data, clk_div=div,
+                                   save_result=save_result,
+                                   id=id, clk_pha=pha, clk_pol=pol))
+        self.spi_check_queue.append(dict(data=data, div=(div + 1) << self.clock_shift,
+                                         nbits=18, save_result=save_result,
+                                         result=random.randint(0, (1 << 18) - 1),
+                                         id=id, pha=pha, pol=pol))
+
+
+    def _pop_dds_check(self, sim, dds_check_queue):
+        dds = dds_check_queue.pop(0)
+        dds_type = dds.pop('cmd')
+        if dds_type == 'set1':
+            self.dds_set1(**dds)
+        elif dds_type == 'set2':
+            self.dds_set2(**dds)
+        elif dds_type == 'reset':
+            self.dds_reset(**dds)
+        elif dds_type == 'get1':
+            self.dds_get_two_bytes(**dds)
+        else:
+            assert dds_type == 'get2'
+            self.dds_get_four_bytes(**dds)
+        dds['cmd'] = dds_type
+        return dds
+
+    def pop_dds0_check(self, sim):
+        return self._pop_dds_check(sim, self.dds0_check_queue)
+
+    def pop_dds1_check(self, sim):
+        return self._pop_dds_check(sim, self.dds1_check_queue)
+
+    def pop_spi_check(self, sim):
+        spi = self.spi_check_queue.pop(0)
+        save_result = spi.pop('save_result')
+        self.spi_set(**spi)
+        spi['save_result'] = save_result
+        return spi
+
+CONSUMER_LATENCY = 5
+
+class TestInstConsumer(TestCaseWithSimulator):
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_set_freq(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_set_freq(id=range(11))
+        circ.rand_dds_set_freq(id=range(11, 22))
+        circ.rand_dds_set_freq(id=range(11, 22))
+        circ.rand_dds_set_freq(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_set_amp_phase(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_set_amp_phase(id=range(11))
+        circ.rand_dds_set_amp_phase(id=range(11, 22))
+        circ.rand_dds_set_amp_phase(id=range(11, 22))
+        circ.rand_dds_set_amp_phase(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_set_two_bytes(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_set_two_bytes(id=range(11))
+        circ.rand_dds_set_two_bytes(id=range(11, 22))
+        circ.rand_dds_set_two_bytes(id=range(11, 22))
+        circ.rand_dds_set_two_bytes(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set1_cycle):
+                await sim.tick()
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set1_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set1_cycle):
+                await sim.tick()
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_set_four_bytes(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_set_four_bytes(id=range(11))
+        circ.rand_dds_set_four_bytes(id=range(11, 22))
+        circ.rand_dds_set_four_bytes(id=range(11, 22))
+        circ.rand_dds_set_four_bytes(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_set2_cycle):
+                await sim.tick()
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_reset(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_reset(id=range(11))
+        circ.rand_dds_reset(id=range(11, 22))
+        circ.rand_dds_reset(id=range(11, 22))
+        circ.rand_dds_reset(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_reset_cycle):
+                await sim.tick()
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_reset_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_reset_cycle):
+                await sim.tick()
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_get_two_bytes(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_get_two_bytes(id=range(11))
+        circ.rand_dds_get_two_bytes(id=range(11, 22))
+        circ.rand_dds_get_two_bytes(id=range(11, 22))
+        circ.rand_dds_get_two_bytes(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get1_cycle):
+                await sim.tick()
+            # The two read from two dds channel conflicts with each other
+            assert sim.get(circ.fifos.result_fifo.level) == 1
+            await circ.read_result.call(sim)
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            dds2 = circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get1_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            dds3 = circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get1_cycle):
+                await sim.tick()
+            assert sim.get(circ.fifos.result_fifo.level) == 2
+            assert (await circ.read_result.call(sim)).data == dds2['data']
+            assert (await circ.read_result.call(sim)).data == dds3['data']
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_dds_get_four_bytes(self, clock_shift):
+        circ = InstConsumerTester(config(clock_shift=clock_shift))
+
+        circ.rand_dds_get_four_bytes(id=range(11))
+        circ.rand_dds_get_four_bytes(id=range(11, 22))
+        circ.rand_dds_get_four_bytes(id=range(11, 22))
+        circ.rand_dds_get_four_bytes(id=range(11, 22))
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            circ.pop_dds0_check(sim)
+            circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get2_cycle):
+                await sim.tick()
+            # The two read from two dds channel conflicts with each other
+            assert sim.get(circ.fifos.result_fifo.level) == 1
+            await circ.read_result.call(sim)
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            dds2 = circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get2_cycle + CONSUMER_LATENCY):
+                await sim.tick()
+            dds3 = circ.pop_dds1_check(sim)
+            for _ in range(circ.dds_get2_cycle):
+                await sim.tick()
+            assert sim.get(circ.fifos.result_fifo.level) == 2
+            assert (await circ.read_result.call(sim)).data == dds2['data']
+            assert (await circ.read_result.call(sim)).data == dds3['data']
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)
+
+    @pytest.mark.parametrize("spi", [False, True])
+    @pytest.mark.parametrize("clock_shift", [0, 1])
+    def test_spi(self, spi, clock_shift):
+        circ = InstConsumerTester(config(spi=spi, clock_shift=clock_shift))
+
+        circ.rand_spi(div=range(3))
+        circ.rand_spi(div=range(3))
+        circ.rand_spi(div=range(3))
+
+        def spi_cycle(div):
+            return div * (18 * 2 + 1) + 1
+
+        async def consumer(sim):
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            sim.set(circ.enable, 0)
+            spi1 = circ.pop_spi_check(sim)
+            for _ in range(spi_cycle(spi1['div'])):
+                await sim.tick()
+            for _ in range(3):
+                await sim.tick()
+            if spi1['save_result']:
+                assert sim.get(circ.fifos.result_fifo.level) == 1
+                assert (await circ.read_result.call(sim)).data == (spi1['result'] if spi else 0)
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(20):
+                await sim.tick()
+            sim.set(circ.enable, 1)
+            for _ in range(CONSUMER_LATENCY):
+                await sim.tick()
+            spi2 = circ.pop_spi_check(sim)
+            for _ in range(spi_cycle(spi2['div']) + CONSUMER_LATENCY):
+                await sim.tick()
+            spi3 = circ.pop_spi_check(sim)
+            for _ in range(spi_cycle(spi3['div']) + CONSUMER_LATENCY):
+                await sim.tick()
+            for _ in range(3):
+                await sim.tick()
+            if spi2['save_result']:
+                assert sim.get(circ.fifos.result_fifo.level) >= 1
+                assert (await circ.read_result.call(sim)).data == (spi2['result'] if spi else 0)
+            if spi3['save_result']:
+                assert sim.get(circ.fifos.result_fifo.level) == 1
+                assert (await circ.read_result.call(sim)).data == (spi3['result'] if spi else 0)
+            assert sim.get(circ.fifos.result_fifo.level) == 0
+            for _ in range(50):
+                await sim.tick()
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(circ.queue_all_cmd)
+            sim.add_testbench(consumer)
+            circ.add_testbenches(sim)

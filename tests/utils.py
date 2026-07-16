@@ -99,20 +99,24 @@ class DDSChecker:
             bus_id = 0
         self.__dds_cmds[bus_id] = dict(id=id, **kws)
 
+    def dds_set1(self, id, addr1, data1, fud=1):
+        self.__dds_cmd(cmd='set1', id=id, addr1=addr1 + 1, data1=data1, fud=fud)
+
+    def dds_set2(self, id, addr1, data1, addr2, data2, fud=1):
+        self.__dds_cmd(cmd='set2', id=id, addr1=addr1 + 1, data1=data1,
+                       addr2=addr2 + 1, data2=data2, fud=fud)
+
     def dds_set_freq(self, id, freq, fud=1):
-        self.__dds_cmd(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
-                       addr2=0x2f, data2=freq >> 16, fud=fud)
+        self.dds_set2(id, 0x2c, freq & 0xffff, 0x2e, freq >> 16, fud)
 
     def dds_set_amp_phase(self, id, amp, phase, fud=1):
-        self.__dds_cmd(cmd='set2', id=id, addr1=0x33, data1=amp,
-                       addr2=0x31, data2=phase, fud=fud)
+        self.dds_set2(id, 0x32, amp, 0x30, phase, fud)
 
     def dds_set_two_bytes(self, id, addr, data, fud=1):
-        self.__dds_cmd(cmd='set1', id=id, addr1=addr + 1, data1=data, fud=fud)
+        self.dds_set1(id, addr, data, fud)
 
     def dds_set_four_bytes(self, id, addr, data, fud=1):
-        self.__dds_cmd(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
-                       addr2=addr + 3, data2=data >> 16, fud=fud)
+        self.dds_set2(id, addr, data & 0xffff, addr + 2, data >> 16, fud)
 
     def dds_reset(self, id):
         self.__dds_cmd(cmd='reset', id=id)

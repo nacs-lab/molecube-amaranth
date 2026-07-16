@@ -4,7 +4,7 @@ from amaranth import *
 from amaranth.lib import enum
 from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 
-from transactron import TModule, Transaction
+from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
@@ -531,5 +531,87 @@ class InstDispatcher(Elaboratable):
                     self.fifos.dds1_cmd_fifo.write(m, dds)
                 with m.Case(3):
                     self.fifos.spi_cmd_fifo.write(m, spi)
+
+        return m
+
+
+class InstReader(Elaboratable):
+    def __init__(self, enable, fifo):
+        self.enable = enable
+        self.fifo = fifo
+        self.read = Method.like(fifo.read, name="read")
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        delay_count = 7
+
+        counter = Signal(range(delay_count))
+        idle = Signal(init=1)
+        ready = Signal()
+
+        with m.If(~idle):
+            m.d.sync += [counter.eq(counter - 1),
+                         idle.eq(counter[1:] == 0)]
+
+        m.d.sync += ready.eq(self.enable & idle)
+
+        m.submodules.delay_pipe = delay_pipe = PipelineBuilder()
+
+        @delay_pipe.stage(m, ready=ready, o=self.fifo.read.layout_out)
+        def _():
+            m.d.sync += [counter.eq(delay_count - 1),
+                         idle.eq(0),
+                         ready.eq(0)]
+            return self.fifo.read(m)
+
+        @delay_pipe.stage(m)
+        def _():
+            pass
+
+        @delay_pipe.stage(m)
+        def _():
+            pass
+
+        delay_pipe.add_external(self.read)
+
+        return m
+
+
+class InstConsumer(Elaboratable):
+    def __init__(self, enable, ioctrl, fifos, *, clock_shift):
+        self.enable = enable
+        self.fifos = fifos
+        self.clock_shift = clock_shift
+        self.ioctrl = ioctrl
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        def shift_cycle_m1(div):
+            return Cat(~C(0, self.clock_shift), div)
+
+        m.submodules.dds0 = dds0 = InstReader(self.enable & ~self.ioctrl.dds0.busy,
+                                              self.fifos.dds0_cmd_fifo)
+        m.submodules.dds1 = dds1 = InstReader(self.enable & ~self.ioctrl.dds1.busy,
+                                              self.fifos.dds1_cmd_fifo)
+        m.submodules.spi = spi = InstReader(self.enable & ~self.ioctrl.spi.busy,
+                                            self.fifos.spi_cmd_fifo)
+
+        with Transaction().body(m):
+            self.ioctrl.dds0.set(m, dds0.read(m))
+
+        with Transaction().body(m):
+            self.ioctrl.dds1.set(m, dds1.read(m))
+
+        with Transaction().body(m):
+            spi_cmd = spi.read(m)
+            self.ioctrl.spi.set(m, data=spi_cmd.data << (32 - 18),
+                                div=shift_cycle_m1(spi_cmd.clk_div),
+                                nbits_minus_1=17,
+                                result=spi_cmd.save_result,
+                                id=spi_cmd.id,
+                                clk_pha=spi_cmd.clk_pha,
+                                clk_pol=spi_cmd.clk_pol)
 
         return m
