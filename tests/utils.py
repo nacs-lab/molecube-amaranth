@@ -32,26 +32,32 @@ class TTLChecker:
 
 
 class ClockoutChecker:
-    def __init__(self, pulseio, csr):
+    def __init__(self, pulseio, csr, clock_shift):
         self.__new_clockout = False
-        self.__clockout_div = 255
+        self.__clockout_off = (256 << clock_shift) - 1
+        self.__clockout_div = self.__clockout_off
+        self.__clock_shift = clock_shift
         self.__pulseio = pulseio
         self.__csr = csr
 
     def clockout_set(self, div):
         self.__new_clockout = True
+        self.__clockout_div = ((div + 1) << self.__clock_shift) - 1
+
+    def clockout_set_shifted(self, div):
+        self.__new_clockout = True
         self.__clockout_div = div
 
     async def __check_clockout_cycle(self, sim, clockout_port):
         self.__new_clockout = False
-        for _ in range((self.__clockout_div + 1) << self.clock_shift):
+        for _ in range(self.__clockout_div + 1):
             # Make sure we see the command added by user coroutine
             await sim.delay(0)
             if self.__new_clockout:
                 return
             assert sim.get(clockout_port.o) == 0
             await sim.tick()
-        for _ in range((self.__clockout_div + 1) << self.clock_shift):
+        for _ in range(self.__clockout_div + 1):
             # Make sure we see the command added by user coroutine
             await sim.delay(0)
             if self.__new_clockout:
@@ -64,8 +70,8 @@ class ClockoutChecker:
         while True:
             # Make sure we see the command added by user coroutine
             await sim.delay(0)
-            assert sim.get(self.__csr.clockout_div) == self.__clockout_div
-            if self.__clockout_div == 255:
+            assert sim.get(self.__csr.clockout_div) == (self.__clockout_div >> self.__clock_shift)
+            if self.__clockout_div == self.__clockout_off:
                 assert sim.get(clockout_port.o) == 0
                 await sim.tick()
             else:

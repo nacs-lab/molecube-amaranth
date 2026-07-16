@@ -40,7 +40,7 @@ class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SP
         self.read_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.read))
 
         TTLChecker.__init__(self, self.pulseio, self.csr)
-        ClockoutChecker.__init__(self, self.pulseio, self.csr)
+        ClockoutChecker.__init__(self, self.pulseio, self.csr, self.clock_shift)
         DDSChecker.__init__(self, self.pulseio, self.csr)
         SPIChecker.__init__(self, self.pulseio, self.csr)
 
