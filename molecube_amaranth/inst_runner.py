@@ -432,3 +432,105 @@ class InstRunner(Elaboratable):
                          force_release.eq(0)]
 
         return m
+
+
+class InstDispatcher(Elaboratable):
+    def __init__(self, csr, fifos):
+        self.csr = csr
+        self.fifos = fifos
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        m.submodules.dispatch_pipe = dispatch_pipe = PipelineBuilder()
+
+        dispatch_pipe.call_method(self.fifos.cmd2_fifo.read)
+        @dispatch_pipe.stage(m)
+        def _():
+            pass
+
+        @dispatch_pipe.stage(m, o=[('op', InstOpCode),
+                                   ('is_dds1', 1), ('dds', DDS_SET_ARG),
+                                   ('spi', SPI_DECODE0)])
+        def _(data):
+            inst = View(INST_STRUCT, data[:63])
+            op = inst.opcode
+
+            ddsarg = inst.dds
+            is_dds1 = ddsarg.id >= 11
+            dds_id = Mux(is_dds1, ddsarg.id - 11, ddsarg.id)
+
+            dds_set_arg = Signal(DDS_SET_ARG)
+            def _set_dds_arg(d):
+                for (k, v) in d.items():
+                    m.d.av_comb += getattr(dds_set_arg, k).eq(v)
+            with m.Switch(ddsarg.opcode):
+                dds_req = DDSReq(self.csr)
+                with m.Case(DDSOpCode.SET_FREQ):
+                    _set_dds_arg(dds_req.set_freq(m, id=dds_id, freq=ddsarg.data))
+                with m.Case(DDSOpCode.SET_AMP_PHASE):
+                    _set_dds_arg(dds_req.set_amp_phase(m, id=dds_id,
+                                                       amp=ddsarg.data[:16],
+                                                       phase=ddsarg.data[16:]))
+                with m.Case(DDSOpCode.SET_TWO_BYTES):
+                    _set_dds_arg(dds_req.set_two_bytes(m, id=dds_id,
+                                                       addr=ddsarg.addr,
+                                                       data=ddsarg.data[:16]))
+                with m.Case(DDSOpCode.GET_TWO_BYTES):
+                    _set_dds_arg(dds_req.get_two_bytes(m, id=dds_id, addr=ddsarg.addr,
+                                                       data1=ddsarg.data[:16],
+                                                       data2=ddsarg.data[16:]))
+                with m.Case(DDSOpCode.RESET):
+                    _set_dds_arg(dds_req.reset(m, id=dds_id, addr1=ddsarg.addr,
+                                               data1=ddsarg.data[:16]))
+                with m.Case(DDSOpCode.SET_FOUR_BYTES):
+                    _set_dds_arg(dds_req.set_four_bytes(m, id=dds_id,
+                                                        addr=ddsarg.addr,
+                                                        data=ddsarg.data))
+                with m.Case(DDSOpCode.GET_FOUR_BYTES):
+                    _set_dds_arg(dds_req.get_four_bytes(m, id=dds_id, addr=ddsarg.addr,
+                                                        data1=ddsarg.data[:16]))
+                with m.Default():
+                    assign_xvalue(m, dds_set_arg, domain='av_comb')
+
+
+            spiarg = inst.spi
+            spi = Signal(SPI_DECODE0)
+            m.d.top_comb += [spi.data.eq(spiarg.data),
+                             spi.clk_div.eq(spiarg.clk_div),
+                             spi.save_result.eq(spiarg.save_result),
+                             spi.id.eq(spiarg.id),
+                             spi.clk_pha.eq(spiarg.clk_pha),
+                             spi.clk_pol.eq(spiarg.clk_pol)]
+
+            return dict(op=op, dds=dds_set_arg, is_dds1=is_dds1, spi=spi)
+
+        dispatch_pipe.fifo(depth=2)
+
+        @dispatch_pipe.stage(m, o=[('tgt', 2)])
+        def _(op, is_dds1):
+            tgt = Signal(2)
+            with m.Switch(op):
+                with m.Case(InstOpCode.TTL, InstOpCode.WAIT,
+                            InstOpCode.CLEAR_UNDERFLOW, InstOpCode.LOOPBACK,
+                            InstOpCode.CLOCKOUT):
+                    m.d.av_comb += tgt.eq(0)
+                with m.Case(InstOpCode.DDS):
+                    m.d.av_comb += tgt.eq(Mux(is_dds1, 2, 1))
+                with m.Case(InstOpCode.SPI):
+                    m.d.av_comb += tgt.eq(3)
+                with m.Default():
+                    assign_xvalue(m, tgt, domain='av_comb')
+            return tgt
+
+        @dispatch_pipe.stage(m)
+        def _(tgt, dds, spi):
+            with m.Switch(tgt):
+                with m.Case(1):
+                    self.fifos.dds0_cmd_fifo.write(m, dds)
+                with m.Case(2):
+                    self.fifos.dds1_cmd_fifo.write(m, dds)
+                with m.Case(3):
+                    self.fifos.spi_cmd_fifo.write(m, spi)
+
+        return m

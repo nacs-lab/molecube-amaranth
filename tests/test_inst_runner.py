@@ -8,9 +8,10 @@ from transactron.lib.adapters import AdapterTrans
 
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.config import Config
+from molecube_amaranth.dds import FSMState as DDSFSMState
 from molecube_amaranth.io import PulseIO, sma_pin
 from molecube_amaranth.fifo import Fifos
-from molecube_amaranth.inst_runner import InstRunner
+from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.controllers import IOController
 
 from .utils import DDSChecker, SPIChecker, InstBuilder
@@ -1616,3 +1617,229 @@ class TestInstRunner(TestCaseWithSimulator):
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
             circ.add_testbenches(sim)
+
+class InstDispatcherTester(Elaboratable):
+    def __init__(self):
+        self.conf = Config()
+        self.csr = Registers(self.conf)
+        self.fifos = Fifos(32)
+
+        self._dds_write_adsu = self.csr.dds_write_adsu.init
+        self._dds_reset_rshd = self.csr.dds_reset_rshd.init
+        self._dds_read_asu = self.csr.dds_read_asu.init
+
+        self._write_cmd = _TestbenchIO(AdapterTrans.create(self.fifos.cmd2_fifo.write))
+        self.read_dds0 = _TestbenchIO(AdapterTrans.create(self.fifos.dds0_cmd_fifo.read))
+        self.read_dds1 = _TestbenchIO(AdapterTrans.create(self.fifos.dds1_cmd_fifo.read))
+        self.read_spi = _TestbenchIO(AdapterTrans.create(self.fifos.spi_cmd_fifo.read))
+
+        self.dds0_queue = []
+        self.dds1_queue = []
+        self.spi_queue = []
+
+    def elaborate(self, _):
+        m = TModule()
+
+        m.submodules.csr = self.csr
+        m.submodules.fifos = self.fifos
+        m.submodules.inst_dispatcher = InstDispatcher(self.csr, self.fifos)
+        m.submodules._write_cmd = self._write_cmd
+        m.submodules.read_dds0 = self.read_dds0
+        m.submodules.read_dds1 = self.read_dds1
+        m.submodules.read_spi = self.read_spi
+
+        return m
+
+    async def write_cmd(self, sim, v1, v2):
+        await self._write_cmd.call(sim, data=v1)
+        await self._write_cmd.call(sim, data=v2)
+
+    def _add_dds_queue(self, **data):
+        id = data['id']
+        if id < 11:
+            self.dds0_queue.append(data)
+        else:
+            data['id'] = id - 11
+            self.dds1_queue.append(data)
+
+    def _dds_write1(self, *, id, addr1, data1, fud=1):
+        self._add_dds_queue(state=DDSFSMState.WR_ADSETUP2.value,
+                            id=id,
+                            hold_cnt=self._dds_write_adsu,
+                            hold_end=self._dds_write_adsu == 0,
+                            read=0, reset=0, fud=fud,
+                            addr1=addr1, data1=data1)
+
+    def _dds_write2(self, *, id, addr1, data1, addr2, data2, fud=1):
+        self._add_dds_queue(state=DDSFSMState.WR_ADSETUP1.value,
+                            id=id,
+                            hold_cnt=self._dds_write_adsu,
+                            hold_end=self._dds_write_adsu == 0,
+                            read=0, reset=0, fud=fud,
+                            addr1=addr1, data1=data1, addr2=addr2, data2=data2)
+
+    def rand_dds_set_freq(self):
+        id = random.randint(0, 21)
+        freq = random.randint(0, 0xffff_ffff)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_set_freq(id=id, freq=freq, timecheck=timecheck)
+        self._dds_write2(id=id, addr1=0x2d >> 1, data1=freq & 0xffff,
+                         addr2=0x2f >> 1, data2=freq >> 16)
+        return inst
+
+    def rand_dds_set_amp_phase(self):
+        id = random.randint(0, 21)
+        amp = random.randint(0, 0xfff)
+        phase = random.randint(0, 0xffff)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_set_amp_phase(id=id, amp=amp, phase=phase,
+                                             timecheck=timecheck)
+        self._dds_write2(id=id, addr1=0x33 >> 1, data1=amp,
+                         addr2=0x31 >> 1, data2=phase)
+        return inst
+
+    def rand_dds_set_two_bytes(self):
+        id = random.randint(0, 21)
+        addr = random.randint(0, 0x3f)
+        data = random.randint(0, 0xffff)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_set_two_bytes(id=id, addr=addr << 1, data=data,
+                                             timecheck=timecheck)
+        self._dds_write1(id=id, addr1=addr, data1=data)
+        return inst
+
+    def rand_dds_set_four_bytes(self):
+        id = random.randint(0, 21)
+        addr = random.randint(0, 0x1f) << 1
+        data = random.randint(0, 0xffff_ffff)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_set_four_bytes(id=id, addr=addr << 1, data=data,
+                                              timecheck=timecheck)
+        addr_2 = addr | 1
+        self._dds_write2(id=id, addr1=addr, data1=data & 0xffff,
+                         addr2=addr_2, data2=data >> 16)
+        return inst
+
+    def rand_dds_reset(self):
+        id = random.randint(0, 21)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_reset(id=id, timecheck=timecheck)
+        self._add_dds_queue(state=DDSFSMState.RESET.value,
+                            id=id, hold_cnt=self._dds_reset_rshd,
+                            hold_end=self._dds_reset_rshd == 0,
+                            read=0, reset=1,
+                            addr1=0, data1=0)
+        return inst
+
+    def rand_dds_get_two_bytes(self):
+        id = random.randint(0, 21)
+        addr = random.randint(0, 0x3f)
+        data = random.randint(0, 0xffff)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_get_two_bytes(id=id, addr=addr << 1, timecheck=timecheck)
+        self._add_dds_queue(state=DDSFSMState.RD_ASETUP2.value,
+                            id=id,
+                            hold_cnt=self._dds_read_asu,
+                            hold_end=self._dds_read_asu == 0,
+                            read=1, reset=0,
+                            addr1=addr, data1=0, data2=0)
+        return inst
+
+    def rand_dds_get_four_bytes(self):
+        id = random.randint(0, 21)
+        addr = random.randint(0, 0x1f) << 1
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.dds_get_four_bytes(id=id, addr=addr << 1, timecheck=timecheck)
+        addr_2 = addr | 1
+        self._add_dds_queue(state=DDSFSMState.RD_ASETUP1.value,
+                            id=id,
+                            hold_cnt=self._dds_read_asu,
+                            hold_end=self._dds_read_asu == 0,
+                            read=1, reset=0,
+                            addr1=addr_2, data1=0,
+                            addr2=addr)
+        return inst
+
+    def rand_spi(self):
+        id = random.randint(0, 3)
+        div = random.randint(0, 0xff)
+        data = random.randint(0, (1 << 18) - 1)
+        pha = random.randint(0, 1)
+        pol = random.randint(0, 1)
+        save_result = random.randint(0, 1)
+        timecheck = random.randint(0, 1)
+        inst = InstBuilder.spi(id=id, div=div + 1, pha=pha, pol=pol, data=data,
+                               save_result=save_result, timecheck=timecheck)
+        self.spi_queue.append(dict(data=data, clk_div=div,
+                                   save_result=save_result,
+                                   id=id, clk_pha=pha, clk_pol=pol))
+        return inst
+
+    def rand_ttl(self):
+        return InstBuilder.ttl(ttl=random.randint(0, 0xffff_ffff),
+                               t=random.randint(0, 0xff_ffff),
+                               bank=random.randint(0, 7),
+                               timecheck=random.randint(0, 1))
+
+    def rand_clockout(self):
+        return InstBuilder.clockout(div=random.randint(0, 255),
+                                    timecheck=random.randint(0, 1))
+
+    def rand_wait(self):
+        return InstBuilder.wait(t=random.randint(0, 0xff_ffff),
+                                trig_chn=random.randint(-1, 255),
+                                trig_raise=random.randint(0, 1),
+                                timecheck=random.randint(0, 1))
+
+    def rand_clear_error(self):
+        return InstBuilder.clear_error()
+
+    def rand_loopback(self):
+        return InstBuilder.loopback(data=random.randint(0, 0xffff_ffff),
+                                    timecheck=random.randint(0, 1))
+
+def _check_fields(v, flds):
+    for name, fldval in flds.items():
+        assert getattr(v, name) == fldval
+
+class TestInstDispatcher(TestCaseWithSimulator):
+    def test_rand(self):
+        circ = InstDispatcherTester()
+
+        insts = []
+        for _ in range(300):
+            insts.append(random.choice((circ.rand_dds_set_freq,
+                                        circ.rand_dds_set_amp_phase,
+                                        circ.rand_dds_set_two_bytes,
+                                        circ.rand_dds_set_four_bytes,
+                                        circ.rand_dds_reset,
+                                        circ.rand_dds_get_two_bytes,
+                                        circ.rand_dds_get_four_bytes,
+                                        circ.rand_spi,
+                                        circ.rand_ttl,
+                                        circ.rand_clockout,
+                                        circ.rand_wait,
+                                        circ.rand_clear_error,
+                                        circ.rand_loopback))())
+
+        async def producer(sim):
+            for inst in insts:
+                await circ.write_cmd(sim, *inst)
+
+        async def consume_dds0(sim):
+            while circ.dds0_queue:
+                _check_fields(await circ.read_dds0.call(sim), circ.dds0_queue.pop(0))
+
+        async def consume_dds1(sim):
+            while circ.dds1_queue:
+                _check_fields(await circ.read_dds1.call(sim), circ.dds1_queue.pop(0))
+
+        async def consume_spi(sim):
+            while circ.spi_queue:
+                _check_fields(await circ.read_spi.call(sim), circ.spi_queue.pop(0))
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consume_dds0)
+            sim.add_testbench(consume_dds1)
+            sim.add_testbench(consume_spi)

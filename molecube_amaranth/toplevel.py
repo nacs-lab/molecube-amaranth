@@ -9,7 +9,7 @@ from amaranth_zynq.ps7 import PsZynq
 from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.fifo import Fifos
-from molecube_amaranth.inst_runner import InstRunner
+from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.interface import ControlInterface
 from molecube_amaranth.io import PulseIO
 
@@ -44,5 +44,7 @@ class TopLevel(Elaboratable):
                                                                 valid_width=9)
         m.submodules.inst_runner = inst_runner = InstRunner(
             pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
+        m.submodules.inst_dispatcher = inst_dispatcher = InstDispatcher(
+            regs, fifos)
 
         return m
