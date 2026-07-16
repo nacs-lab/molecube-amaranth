@@ -14,7 +14,7 @@ from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.controllers import IOController
 
-from .utils import DDSChecker, SPIChecker, InstBuilder
+from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker, InstBuilder
 
 import pytest
 import random
@@ -29,7 +29,7 @@ def config(*, spi=False, clock_shift=1):
         kws = dict()
     return Config(TTLIN=sma_pin(0, 0), **kws, CLOCK_SHIFT=clock_shift)
 
-class InstRunnerTester(Elaboratable):
+class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SPIChecker):
     def __init__(self, conf):
         self.pulseio = PulseIO.from_config(None, conf)
         self.csr = Registers(conf)
@@ -39,16 +39,10 @@ class InstRunnerTester(Elaboratable):
         self._write_cmd = _TestbenchIO(AdapterTrans.create(self.fifos.cmd_fifo.write))
         self.read_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.read))
 
-        self._ttl = 0
-        self._ttl_hi = 0
-        self._ttl_lo = 0
-
-        self._new_clockout = False
-        self._clockout_div = 255
-
-        self._dds_cmd = None
-
-        self._spi_cmd = None
+        TTLChecker.__init__(self, self.pulseio, self.csr)
+        ClockoutChecker.__init__(self, self.pulseio, self.csr)
+        DDSChecker.__init__(self, self.pulseio, self.csr)
+        SPIChecker.__init__(self, self.pulseio, self.csr)
 
     def elaborate(self, _):
         m = TModule()
@@ -69,149 +63,13 @@ class InstRunnerTester(Elaboratable):
     def add_testbenches(self, sim):
         sim.add_testbench(self.check_ttl, background=True)
         sim.add_testbench(self.check_clockout, background=True)
-        async def check_dds0(sim):
-            await self.check_dds(sim, 0)
-        async def check_dds1(sim):
-            await self.check_dds(sim, 1)
-        sim.add_testbench(check_dds0, background=True)
-        sim.add_testbench(check_dds1, background=True)
+        sim.add_testbench(self.check_dds0, background=True)
+        sim.add_testbench(self.check_dds1, background=True)
         sim.add_testbench(self.check_spi, background=True)
 
     async def write_cmd(self, sim, v1, v2):
         await self._write_cmd.call(sim, data=v1)
         await self._write_cmd.call(sim, data=v2)
-
-    def ttl_set(self, ttl):
-        self._ttl = ttl
-
-    def ttl_set_ovr(self, lo, hi):
-        self._ttl_lo = lo
-        self._ttl_hi = hi
-
-    async def check_ttl(self, sim):
-        ttlout_port = self.pulseio.ttlout_port
-        ttlout_reg = self.csr.ttl_out
-        while True:
-            # Make sure we see the command added by user coroutine
-            await sim.delay(0)
-            assert sim.get(ttlout_reg) == self._ttl
-            assert sim.get(ttlout_port.o) == (self._ttl | self._ttl_hi) & ~self._ttl_lo
-            await sim.tick()
-
-    def clockout_set(self, div):
-        self._new_clockout = True
-        self._clockout_div = div
-
-    async def _check_clockout_cycle(self, sim, clockout_port):
-        self._new_clockout = False
-        for _ in range((self._clockout_div + 1) << self.clock_shift):
-            # Make sure we see the command added by user coroutine
-            await sim.delay(0)
-            if self._new_clockout:
-                return
-            assert sim.get(clockout_port.o) == 0
-            await sim.tick()
-        for _ in range((self._clockout_div + 1) << self.clock_shift):
-            # Make sure we see the command added by user coroutine
-            await sim.delay(0)
-            if self._new_clockout:
-                  return
-            assert sim.get(clockout_port.o) == 1
-            await sim.tick()
-
-    async def check_clockout(self, sim):
-        clockout_port = self.pulseio.clockout_port
-        while True:
-            # Make sure we see the command added by user coroutine
-            await sim.delay(0)
-            assert sim.get(self.csr.clockout_div) == self._clockout_div
-            if self._clockout_div == 255:
-                assert sim.get(clockout_port.o) == 0
-                await sim.tick()
-            else:
-                await self._check_clockout_cycle(sim, clockout_port)
-
-    def dds_set_freq(self, id, freq):
-        self._dds_cmd = dict(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
-                             addr2=0x2f, data2=freq >> 16)
-
-    def dds_set_amp_phase(self, id, amp, phase):
-        self._dds_cmd = dict(cmd='set2', id=id, addr1=0x33, data1=amp,
-                             addr2=0x31, data2=phase)
-
-    def dds_set_two_bytes(self, id, addr, data):
-        self._dds_cmd = dict(cmd='set1', id=id, addr1=addr + 1, data1=data)
-
-    def dds_set_four_bytes(self, id, addr, data):
-        self._dds_cmd = dict(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
-                             addr2=addr + 3, data2=data >> 16)
-
-    def dds_reset(self, id):
-        self._dds_cmd = dict(cmd='reset', id=id)
-
-    def dds_get_two_bytes(self, id, addr, data):
-        self._dds_cmd = dict(cmd='get1', id=id, addr=addr + 1, data=data)
-
-    def dds_get_four_bytes(self, id, addr, data):
-        self._dds_cmd = dict(cmd='get2', id=id, addr=addr + 1, data=data)
-
-    def _get_dds_cmd(self, bank):
-        if self._dds_cmd is None:
-            return
-        cmd = self._dds_cmd
-        id = cmd['id']
-        if bank == 0 and id < 11:
-            self._dds_cmd = None
-            return cmd
-        if bank == 1 and id >= 11:
-            self._dds_cmd = None
-            cmd['id'] = id - 11
-            return cmd
-
-    async def _check_dds_cmd(self, sim, bank, port):
-        # Make sure we see the command added by user coroutine
-        await sim.delay(0)
-        cmd = self._get_dds_cmd(bank)
-        if cmd is None:
-            await DDSChecker.idle(sim, port, 1)
-            return
-        op = cmd.pop('cmd')
-        if op == 'set1':
-            await DDSChecker.set1(sim, self.csr, port, **cmd)
-        elif op == 'set2':
-            await DDSChecker.set2(sim, self.csr, port, **cmd)
-        elif op == 'reset':
-            await DDSChecker.reset(sim, self.csr, port, **cmd)
-        elif op == 'get1':
-            await DDSChecker.get1(sim, self.csr, port, **cmd)
-        elif op == 'get2':
-            await DDSChecker.get2(sim, self.csr, port, **cmd)
-        else:
-            raise ValueError(f"Unknown DDS command {op}")
-
-    async def check_dds(self, sim, bank):
-        port = self.pulseio.dds0_port if bank == 0 else self.pulseio.dds1_port
-        while True:
-            await self._check_dds_cmd(sim, bank, port)
-
-    def spi_set(self, *, id, div, nbits, pha, pol, data, result):
-        self._spi_cmd = dict(id=id, div=div, nbits=nbits, pha=pha, pol=pol,
-                             data=data, result=result)
-
-    async def check_spi(self, sim):
-        port = self.pulseio.spi_port
-        if port is None:
-            return
-        while True:
-            # Make sure we see the command added by user coroutine
-            await sim.delay(0)
-            cmd = self._spi_cmd
-            self._spi_cmd = None
-            if cmd is None:
-                await SPIChecker.idle(sim, port, 1)
-            else:
-                await SPIChecker.spi(sim, port, **cmd)
-                await sim.tick()
 
 FIFO_LATENCY = 8
 RELEASE_LATENCY = 3

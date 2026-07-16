@@ -4,7 +4,149 @@ def get_bits(data, nbits):
     for bit in range(nbits):
         yield (data >> (nbits - bit - 1)) & 1
 
+
+class TTLChecker:
+    def __init__(self, pulseio, csr):
+        self.__ttl = 0
+        self.__ttl_hi = 0
+        self.__ttl_lo = 0
+        self.__pulseio = pulseio
+        self.__csr = csr
+
+    def ttl_set(self, ttl):
+        self.__ttl = ttl
+
+    def ttl_set_ovr(self, lo, hi):
+        self.__ttl_lo = lo
+        self.__ttl_hi = hi
+
+    async def check_ttl(self, sim):
+        ttlout_port = self.__pulseio.ttlout_port
+        ttlout_reg = self.__csr.ttl_out
+        while True:
+            # Make sure we see the command added by user coroutine
+            await sim.delay(0)
+            assert sim.get(ttlout_reg) == self.__ttl
+            assert sim.get(ttlout_port.o) == (self.__ttl | self.__ttl_hi) & ~self.__ttl_lo
+            await sim.tick()
+
+
+class ClockoutChecker:
+    def __init__(self, pulseio, csr):
+        self.__new_clockout = False
+        self.__clockout_div = 255
+        self.__pulseio = pulseio
+        self.__csr = csr
+
+    def clockout_set(self, div):
+        self.__new_clockout = True
+        self.__clockout_div = div
+
+    async def __check_clockout_cycle(self, sim, clockout_port):
+        self.__new_clockout = False
+        for _ in range((self.__clockout_div + 1) << self.clock_shift):
+            # Make sure we see the command added by user coroutine
+            await sim.delay(0)
+            if self.__new_clockout:
+                return
+            assert sim.get(clockout_port.o) == 0
+            await sim.tick()
+        for _ in range((self.__clockout_div + 1) << self.clock_shift):
+            # Make sure we see the command added by user coroutine
+            await sim.delay(0)
+            if self.__new_clockout:
+                  return
+            assert sim.get(clockout_port.o) == 1
+            await sim.tick()
+
+    async def check_clockout(self, sim):
+        clockout_port = self.__pulseio.clockout_port
+        while True:
+            # Make sure we see the command added by user coroutine
+            await sim.delay(0)
+            assert sim.get(self.__csr.clockout_div) == self.__clockout_div
+            if self.__clockout_div == 255:
+                assert sim.get(clockout_port.o) == 0
+                await sim.tick()
+            else:
+                await self.__check_clockout_cycle(sim, clockout_port)
+
+
 class DDSChecker:
+    def __init__(self, pulseio, csr):
+        self.__dds_cmd = None
+        self.__pulseio = pulseio
+        self.__csr = csr
+
+    def dds_set_freq(self, id, freq):
+        self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
+                             addr2=0x2f, data2=freq >> 16)
+
+    def dds_set_amp_phase(self, id, amp, phase):
+        self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x33, data1=amp,
+                             addr2=0x31, data2=phase)
+
+    def dds_set_two_bytes(self, id, addr, data):
+        self.__dds_cmd = dict(cmd='set1', id=id, addr1=addr + 1, data1=data)
+
+    def dds_set_four_bytes(self, id, addr, data):
+        self.__dds_cmd = dict(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
+                             addr2=addr + 3, data2=data >> 16)
+
+    def dds_reset(self, id):
+        self.__dds_cmd = dict(cmd='reset', id=id)
+
+    def dds_get_two_bytes(self, id, addr, data):
+        self.__dds_cmd = dict(cmd='get1', id=id, addr=addr + 1, data=data)
+
+    def dds_get_four_bytes(self, id, addr, data):
+        self.__dds_cmd = dict(cmd='get2', id=id, addr=addr + 1, data=data)
+
+    def __get_dds_cmd(self, bank):
+        if self.__dds_cmd is None:
+            return
+        cmd = self.__dds_cmd
+        id = cmd['id']
+        if bank == 0 and id < 11:
+            self.__dds_cmd = None
+            return cmd
+        if bank == 1 and id >= 11:
+            self.__dds_cmd = None
+            cmd['id'] = id - 11
+            return cmd
+
+    async def __check_dds_cmd(self, sim, bank, port):
+        # Make sure we see the command added by user coroutine
+        await sim.delay(0)
+        cmd = self.__get_dds_cmd(bank)
+        if cmd is None:
+            await self.idle(sim, port, 1)
+            return
+        op = cmd.pop('cmd')
+        if op == 'set1':
+            await self.set1(sim, self.__csr, port, **cmd)
+        elif op == 'set2':
+            await self.set2(sim, self.__csr, port, **cmd)
+        elif op == 'reset':
+            await self.reset(sim, self.__csr, port, **cmd)
+        elif op == 'get1':
+            await self.get1(sim, self.__csr, port, **cmd)
+        elif op == 'get2':
+            await self.get2(sim, self.__csr, port, **cmd)
+        else:
+            raise ValueError(f"Unknown DDS command {op}")
+
+    async def check_dds(self, sim, bank):
+        port = self.__pulseio.dds0_port if bank == 0 else self.__pulseio.dds1_port
+        while True:
+            await self.__check_dds_cmd(sim, bank, port)
+
+    async def check_dds0(self, sim):
+        await self.check_dds(sim, 0)
+
+    async def check_dds1(self, sim):
+        await self.check_dds(sim, 1)
+
     @staticmethod
     async def idle(sim, port, n=10):
         for _ in range(n):
@@ -270,6 +412,30 @@ class DDSChecker:
 
 
 class SPIChecker:
+    def __init__(self, pulseio, csr):
+        self.__spi_cmd = None
+        self.__pulseio = pulseio
+        self.__csr = csr
+
+    def spi_set(self, *, id, div, nbits, pha, pol, data, result):
+        self.__spi_cmd = dict(id=id, div=div, nbits=nbits, pha=pha, pol=pol,
+                             data=data, result=result)
+
+    async def check_spi(self, sim):
+        port = self.__pulseio.spi_port
+        if port is None:
+            return
+        while True:
+            # Make sure we see the command added by user coroutine
+            await sim.delay(0)
+            cmd = self.__spi_cmd
+            self.__spi_cmd = None
+            if cmd is None:
+                await self.idle(sim, port, 1)
+            else:
+                await self.spi(sim, port, **cmd)
+                await sim.tick()
+
     @staticmethod
     async def idle(sim, port, n=10):
         ncs = len(port.cs)
