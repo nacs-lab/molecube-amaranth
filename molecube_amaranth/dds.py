@@ -315,6 +315,9 @@ class DDSController(Elaboratable):
                                                   FSMState.WR_FINALHOLD)),
                                  hold_cnt.eq(Mux(dds_need_fud, self.csr.dds_write_fuddl,
                                                  self.csr.dds_write_adhd)),
+                                 hold_end.eq(Mux(dds_need_fud,
+                                                 self.csr.dds_write_fuddl_iszero,
+                                                 self.csr.dds_write_adhd_iszero)),
                                  dds_wr.eq(0)]
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
