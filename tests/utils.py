@@ -126,19 +126,19 @@ class DDSChecker:
         await sim.delay(0)
         cmd = self.__get_dds_cmd(bank)
         if cmd is None:
-            await self.idle(sim, port, 1)
+            await DDSChecker.idle(sim, port, 1)
             return
         op = cmd.pop('cmd')
         if op == 'set1':
-            await self.set1(sim, self.__csr, port, **cmd)
+            await DDSChecker.set1(sim, self.__csr, port, **cmd)
         elif op == 'set2':
-            await self.set2(sim, self.__csr, port, **cmd)
+            await DDSChecker.set2(sim, self.__csr, port, **cmd)
         elif op == 'reset':
-            await self.reset(sim, self.__csr, port, **cmd)
+            await DDSChecker.reset(sim, self.__csr, port, **cmd)
         elif op == 'get1':
-            await self.get1(sim, self.__csr, port, **cmd)
+            await DDSChecker.get1(sim, self.__csr, port, **cmd)
         elif op == 'get2':
-            await self.get2(sim, self.__csr, port, **cmd)
+            await DDSChecker.get2(sim, self.__csr, port, **cmd)
         else:
             raise ValueError(f"Unknown DDS command {op}")
 
@@ -437,9 +437,9 @@ class SPIChecker:
             cmd = self.__spi_cmd
             self.__spi_cmd = None
             if cmd is None:
-                await self.idle(sim, port, 1)
+                await SPIChecker.idle(sim, port, 1)
             else:
-                await self.spi(sim, port, **cmd)
+                await SPIChecker.spi(sim, port, **cmd)
                 await sim.tick()
 
     @staticmethod
