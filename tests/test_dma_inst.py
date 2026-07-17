@@ -98,7 +98,8 @@ class ParserState:
         self.ttl_mask = 0
 
     def add_wait(self, *, cycle):
-        self.queue.append({'wait': {'cycle': cycle}, 'actions': self.actions})
+        self.queue.append({'wait': {'cycle': cycle, 'is0': cycle == 0},
+                           'actions': self.actions})
         self.actions = {}
 
     def add_wait_trig(self, *, chn, edge, cycle):
