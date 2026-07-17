@@ -84,20 +84,20 @@ class DDSChecker:
         self.__pulseio = pulseio
         self.__csr = csr
 
-    def dds_set_freq(self, id, freq):
+    def dds_set_freq(self, id, freq, fud=1):
         self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x2d, data1=freq & 0xffff,
-                             addr2=0x2f, data2=freq >> 16)
+                              addr2=0x2f, data2=freq >> 16, fud=fud)
 
-    def dds_set_amp_phase(self, id, amp, phase):
+    def dds_set_amp_phase(self, id, amp, phase, fud=1):
         self.__dds_cmd = dict(cmd='set2', id=id, addr1=0x33, data1=amp,
-                             addr2=0x31, data2=phase)
+                              addr2=0x31, data2=phase, fud=fud)
 
-    def dds_set_two_bytes(self, id, addr, data):
-        self.__dds_cmd = dict(cmd='set1', id=id, addr1=addr + 1, data1=data)
+    def dds_set_two_bytes(self, id, addr, data, fud=1):
+        self.__dds_cmd = dict(cmd='set1', id=id, addr1=addr + 1, data1=data, fud=fud)
 
-    def dds_set_four_bytes(self, id, addr, data):
+    def dds_set_four_bytes(self, id, addr, data, fud=1):
         self.__dds_cmd = dict(cmd='set2', id=id, addr1=addr + 1, data1=data & 0xffff,
-                             addr2=addr + 3, data2=data >> 16)
+                              addr2=addr + 3, data2=data >> 16, fud=fud)
 
     def dds_reset(self, id):
         self.__dds_cmd = dict(cmd='reset', id=id)
@@ -167,7 +167,7 @@ class DDSChecker:
             await sim.tick()
 
     @staticmethod
-    async def set1(sim, csr, port, *, id, addr1, data1):
+    async def set1(sim, csr, port, *, id, addr1, data1, fud):
         assert addr1 & 1 == 1
         t_adsu = sim.get(csr.dds_write_adsu) + 1
         t_wrlow = sim.get(csr.dds_write_wrlow) + 1
@@ -199,6 +199,19 @@ class DDSChecker:
             assert sim.get(port.cs.o) == cs
             await sim.tick()
 
+        if not fud:
+            for _ in range(t_adhd):
+                assert sim.get(port.addr.o) == addr1
+                assert sim.get(port.data.oe) == (1 << 16) - 1
+                assert sim.get(port.data.o) == data1
+                assert sim.get(port.reset.o) == 0
+                assert sim.get(port.rdb.o) == 1
+                assert sim.get(port.wrb.o) == 1
+                assert sim.get(port.fud.o) == 0
+                assert sim.get(port.cs.o) == cs
+                await sim.tick()
+            return
+
         for _ in range(t_fuddl):
             assert sim.get(port.addr.o) == addr1
             assert sim.get(port.data.oe) == (1 << 16) - 1
@@ -222,7 +235,7 @@ class DDSChecker:
             await sim.tick()
 
     @staticmethod
-    async def set2(sim, csr, port, *, id, addr1, data1, addr2, data2):
+    async def set2(sim, csr, port, *, id, addr1, data1, addr2, data2, fud):
         assert addr1 & 1 == 1
         assert addr2 & 1 == 1
         t_adsu = sim.get(csr.dds_write_adsu) + 1
@@ -287,6 +300,19 @@ class DDSChecker:
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
             await sim.tick()
+
+        if not fud:
+            for _ in range(t_adhd):
+                assert sim.get(port.addr.o) == addr2
+                assert sim.get(port.data.oe) == (1 << 16) - 1
+                assert sim.get(port.data.o) == data2
+                assert sim.get(port.reset.o) == 0
+                assert sim.get(port.rdb.o) == 1
+                assert sim.get(port.wrb.o) == 1
+                assert sim.get(port.fud.o) == 0
+                assert sim.get(port.cs.o) == cs
+                await sim.tick()
+            return
 
         for _ in range(t_fuddl):
             assert sim.get(port.addr.o) == addr2

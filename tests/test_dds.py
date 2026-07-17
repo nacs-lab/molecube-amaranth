@@ -113,14 +113,15 @@ class DDSControllerTester(Elaboratable):
 
     async def check_write1(self, sim, id, addr1, data1):
         self.set_cache(id, addr1 >> 1, data1)
-        await DDSChecker.set1(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1)
+        await DDSChecker.set1(sim, self.csr, self.port, id=id,
+                              addr1=addr1, data1=data1, fud=1)
         await DDSChecker.idle(sim, self.port)
 
     async def check_write2(self, sim, id, addr1, data1, addr2, data2):
         self.set_cache(id, addr1 >> 1, data1)
         self.set_cache(id, addr2 >> 1, data2)
         await DDSChecker.set2(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1,
-                              addr2=addr2, data2=data2)
+                              addr2=addr2, data2=data2, fud=1)
         await DDSChecker.idle(sim, self.port)
 
     async def check_read1(self, sim, id, addr, data):
