@@ -25,6 +25,7 @@ class SPIController(Elaboratable):
             clk_pol=1))
         self.result_fifo = result_fifo
         self.set = Method(i=self.spi_layout)
+        self.busy = Signal()
 
     def elaborate(self, plat):
         m = TModule()
@@ -33,7 +34,6 @@ class SPIController(Elaboratable):
         result_data = Signal(32)
 
         # Sending/receiving
-        busy = Signal(1)
         status = Signal(self.spi_layout)
         # Chip selection, active high
         spi_cs = Signal(4)
@@ -54,7 +54,7 @@ class SPIController(Elaboratable):
         def _(arg):
             assign_xvalue(m, spi_sclk_edges)
             assign_xvalue(m, div_cycle)
-            m.d.sync += [busy.eq(1),
+            m.d.sync += [self.busy.eq(1),
                          status.eq(arg),
                          # Set up the clock first before asserting chip select
                          # since we might not be idling in the correct clock level
@@ -67,7 +67,7 @@ class SPIController(Elaboratable):
         falling_output = Signal(1)
         m.d.sync += falling_output.eq(status.clk_pha^status.clk_pol)
 
-        with m.If(busy):
+        with m.If(self.busy):
             with m.If(spi_cs == 0):
                 # Setup
                 m.d.sync += [spi_cs.eq(1 << status.id),
@@ -95,7 +95,7 @@ class SPIController(Elaboratable):
                 with m.If((spi_sclk_edges >> 1) == status.nbits_minus_1 + 1):
                     assign_xvalue(m, spi_sclk_edges)
                     assign_xvalue(m, div_cycle)
-                    m.d.sync += [busy.eq(0),
+                    m.d.sync += [self.busy.eq(0),
                                  spi_cs.eq(0),
                                  spi_sclk.eq(1),
                                  status.data[31].eq(0)]

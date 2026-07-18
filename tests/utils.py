@@ -469,10 +469,11 @@ class DDSChecker:
 
 
 class SPIChecker:
-    def __init__(self, pulseio, csr):
+    def __init__(self, pulseio, csr, ctrl):
         self.__spi_cmd = None
         self.__pulseio = pulseio
         self.__csr = csr
+        self.__ctrl = ctrl
 
     def spi_set(self, *, id, div, nbits, pha, pol, data, result):
         self.__spi_cmd = dict(id=id, div=div, nbits=nbits, pha=pha, pol=pol,
@@ -482,29 +483,31 @@ class SPIChecker:
         port = self.__pulseio.spi_port
         if port is None:
             return
+        ctrl = self.__ctrl
         while True:
             # Make sure we see the command added by user coroutine
             await sim.delay(0)
             cmd = self.__spi_cmd
             self.__spi_cmd = None
             if cmd is None:
-                await SPIChecker.idle(sim, port, 1)
+                await SPIChecker.idle(sim, port, 1, ctrl=ctrl)
             else:
-                await SPIChecker.spi(sim, port, **cmd)
+                await SPIChecker.spi(sim, port, **cmd, ctrl=ctrl)
                 await sim.tick()
 
     @staticmethod
-    async def idle(sim, port, n=10):
+    async def idle(sim, port, n=10, *, ctrl):
         ncs = len(port.cs)
         csmask = (1 << ncs) - 1
         for _ in range(n):
             assert sim.get(port.mosi.o) == 0
             assert sim.get(port.sclk.o) == 1
             assert sim.get(port.cs.o) == csmask
+            assert sim.get(ctrl.busy) == 0
             await sim.tick()
 
     @staticmethod
-    async def spi(sim, port, *, id, div, nbits, pha, pol, data, result=0):
+    async def spi(sim, port, *, id, div, nbits, pha, pol, data, result=0, ctrl):
         ncs = len(port.cs)
         csmask = (1 << ncs) - 1
         bits = list(get_bits(data, nbits))
@@ -513,10 +516,12 @@ class SPIChecker:
         assert sim.get(port.mosi.o) == bits[0]
         assert sim.get(port.sclk.o) == pol
         assert sim.get(port.cs.o) == csmask
+        assert sim.get(ctrl.busy) == 1
 
         async def check_half_period(d, clk):
             for _ in range(div):
                 await sim.tick()
+                assert sim.get(ctrl.busy) == 1
                 assert sim.get(port.mosi.o) == d
                 assert sim.get(port.sclk.o) == clk
                 assert sim.get(port.cs.o) == cs

@@ -32,7 +32,7 @@ def get_spi_test():
     controller = SPIController(buff, fifo)
     m.submodules.circ = circ = SimpleTestCircuit(controller)
 
-    return m, circ, port, fifo_circ
+    return m, circ, port, fifo_circ, controller
 
 class TestSPI(TestCaseWithSimulator):
     def test_empty(self):
@@ -76,10 +76,10 @@ class TestSPI(TestCaseWithSimulator):
             sim.add_testbench(f)
 
     def test_idle(self):
-        m, circ, port, fifo_circ = get_spi_test()
+        m, circ, port, fifo_circ, controller = get_spi_test()
 
         async def f(sim):
-            await SPIChecker.idle(sim, port, 100)
+            await SPIChecker.idle(sim, port, 100, ctrl=controller)
 
         with self.run_simulation(m) as sim:
             sim.add_testbench(f)
@@ -90,7 +90,7 @@ class TestSPI(TestCaseWithSimulator):
     @pytest.mark.parametrize("pol", range(2))
     @pytest.mark.parametrize("save_result", range(2))
     def test_spi(self, div, nbits, pha, pol, save_result):
-        m, circ, port, fifo_circ = get_spi_test()
+        m, circ, port, fifo_circ, controller = get_spi_test()
 
         async def f(sim):
             for _ in range(5):
@@ -105,7 +105,8 @@ class TestSPI(TestCaseWithSimulator):
                                     result=save_result, id=id,
                                     clk_pha=pha, clk_pol=pol)
                 await SPIChecker.spi(sim, port, id=id, div=div, nbits=nbits,
-                                     pha=pha, pol=pol, data=data, result=result_data)
+                                     pha=pha, pol=pol, data=data, result=result_data,
+                                     ctrl=controller)
                 # Wait two cycles to avoid writing to the result fifo simutaniously...
                 await sim.tick()
                 await sim.tick()

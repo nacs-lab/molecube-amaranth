@@ -45,7 +45,7 @@ class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SP
         ClockoutChecker.__init__(self, self.pulseio, self.csr, self.clock_shift)
         DDSChecker.__init__(self, self.pulseio, self.csr,
                             (self.ioctrl.dds0, self.ioctrl.dds1))
-        SPIChecker.__init__(self, self.pulseio, self.csr)
+        SPIChecker.__init__(self, self.pulseio, self.csr, self.ioctrl.spi)
 
     def elaborate(self, _):
         m = TModule()
