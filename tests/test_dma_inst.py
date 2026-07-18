@@ -526,7 +526,8 @@ class RunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SPIChe
 
         TTLChecker.__init__(self, self.pulseio, self.csr)
         ClockoutChecker.__init__(self, self.pulseio, self.csr, conf.CLOCK_SHIFT)
-        DDSChecker.__init__(self, self.pulseio, self.csr)
+        DDSChecker.__init__(self, self.pulseio, self.csr,
+                            (self.ioctrl.dds0, self.ioctrl.dds1))
         SPIChecker.__init__(self, self.pulseio, self.csr)
 
     def elaborate(self, plat):

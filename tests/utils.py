@@ -79,10 +79,11 @@ class ClockoutChecker:
 
 
 class DDSChecker:
-    def __init__(self, pulseio, csr):
+    def __init__(self, pulseio, csr, ctrl):
         self.__dds_cmds = [None, None]
         self.__pulseio = pulseio
         self.__csr = csr
+        self.__ctrl = ctrl
 
     def __dds_cmd(self, id, **kws):
         if id >= 11:
@@ -127,20 +128,21 @@ class DDSChecker:
         # Make sure we see the command added by user coroutine
         await sim.delay(0)
         cmd = self.__get_dds_cmd(bank)
+        ctrl = self.__ctrl[bank]
         if cmd is None:
-            await DDSChecker.idle(sim, port, 1)
+            await DDSChecker.idle(sim, port, 1, ctrl=ctrl)
             return
         op = cmd.pop('cmd')
         if op == 'set1':
-            await DDSChecker.set1(sim, self.__csr, port, **cmd)
+            await DDSChecker.set1(sim, self.__csr, port, **cmd, ctrl=ctrl)
         elif op == 'set2':
-            await DDSChecker.set2(sim, self.__csr, port, **cmd)
+            await DDSChecker.set2(sim, self.__csr, port, **cmd, ctrl=ctrl)
         elif op == 'reset':
-            await DDSChecker.reset(sim, self.__csr, port, **cmd)
+            await DDSChecker.reset(sim, self.__csr, port, **cmd, ctrl=ctrl)
         elif op == 'get1':
-            await DDSChecker.get1(sim, self.__csr, port, **cmd)
+            await DDSChecker.get1(sim, self.__csr, port, **cmd, ctrl=ctrl)
         elif op == 'get2':
-            await DDSChecker.get2(sim, self.__csr, port, **cmd)
+            await DDSChecker.get2(sim, self.__csr, port, **cmd, ctrl=ctrl)
         else:
             raise ValueError(f"Unknown DDS command {op}")
 
@@ -156,7 +158,7 @@ class DDSChecker:
         await self.check_dds(sim, 1)
 
     @staticmethod
-    async def idle(sim, port, n=10):
+    async def idle(sim, port, n=10, *, ctrl):
         for _ in range(n):
             assert sim.get(port.addr.o) == 1
             assert sim.get(port.data.oe) == (1 << 16) - 1
@@ -166,10 +168,11 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == (1 << 11) - 1
+            assert sim.get(ctrl.busy) == 0
             await sim.tick()
 
     @staticmethod
-    async def set1(sim, csr, port, *, id, addr1, data1, fud):
+    async def set1(sim, csr, port, *, id, addr1, data1, fud, ctrl):
         assert addr1 & 1 == 1
         t_adsu = sim.get(csr.dds_write_adsu) + 1
         t_wrlow = sim.get(csr.dds_write_wrlow) + 1
@@ -188,6 +191,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_wrlow):
@@ -199,6 +203,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         if not fud:
@@ -211,6 +216,7 @@ class DDSChecker:
                 assert sim.get(port.wrb.o) == 1
                 assert sim.get(port.fud.o) == 0
                 assert sim.get(port.cs.o) == cs
+                assert sim.get(ctrl.busy) == 1
                 await sim.tick()
             return
 
@@ -223,6 +229,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_fudhd):
@@ -234,10 +241,11 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 1
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
     @staticmethod
-    async def set2(sim, csr, port, *, id, addr1, data1, addr2, data2, fud):
+    async def set2(sim, csr, port, *, id, addr1, data1, addr2, data2, fud, ctrl):
         assert addr1 & 1 == 1
         assert addr2 & 1 == 1
         t_adsu = sim.get(csr.dds_write_adsu) + 1
@@ -257,6 +265,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_wrlow):
@@ -268,6 +277,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_adhd):
@@ -279,6 +289,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_adsu):
@@ -290,6 +301,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_wrlow):
@@ -301,6 +313,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 0
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         if not fud:
@@ -313,6 +326,7 @@ class DDSChecker:
                 assert sim.get(port.wrb.o) == 1
                 assert sim.get(port.fud.o) == 0
                 assert sim.get(port.cs.o) == cs
+                assert sim.get(ctrl.busy) == 1
                 await sim.tick()
             return
 
@@ -325,6 +339,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(t_fudhd):
@@ -336,10 +351,11 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 1
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
     @staticmethod
-    async def reset(sim, csr, port, *, id):
+    async def reset(sim, csr, port, *, id, ctrl):
         rshd = sim.get(csr.dds_reset_rshd)
 
         cs = ((1 << 11) - 1) ^ (1 << id)
@@ -353,10 +369,11 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
     @staticmethod
-    async def get1(sim, csr, port, *, id, addr, data):
+    async def get1(sim, csr, port, *, id, addr, data, ctrl):
         assert addr & 1 == 1
         asu = sim.get(csr.dds_read_asu)
         rdhoz = sim.get(csr.dds_read_rdhoz)
@@ -374,6 +391,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(rdhoz + 1):
@@ -385,10 +403,11 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
     @staticmethod
-    async def get2(sim, csr, port, *, id, addr, data):
+    async def get2(sim, csr, port, *, id, addr, data, ctrl):
         assert addr & 1 == 1
         asu = sim.get(csr.dds_read_asu)
         rdl = sim.get(csr.dds_read_rdl)
@@ -407,6 +426,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(rdl + 1):
@@ -418,6 +438,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         sim.set(port.data.i, data & 0xffff)
@@ -431,6 +452,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
         for _ in range(rdhoz + 1):
@@ -442,6 +464,7 @@ class DDSChecker:
             assert sim.get(port.wrb.o) == 1
             assert sim.get(port.fud.o) == 0
             assert sim.get(port.cs.o) == cs
+            assert sim.get(ctrl.busy) == 1
             await sim.tick()
 
 

@@ -35,13 +35,16 @@ class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SP
         self.csr = Registers(conf)
         self.fifos = Fifos(32)
         self.clock_shift = conf.CLOCK_SHIFT
+        self.ioctrl = IOController(self.pulseio, self.csr, self.fifos,
+                                   clock_shift=self.clock_shift)
 
         self._write_cmd = _TestbenchIO(AdapterTrans.create(self.fifos.cmd_fifo.write))
         self.read_result = _TestbenchIO(AdapterTrans.create(self.fifos.result_fifo.read))
 
         TTLChecker.__init__(self, self.pulseio, self.csr)
         ClockoutChecker.__init__(self, self.pulseio, self.csr, self.clock_shift)
-        DDSChecker.__init__(self, self.pulseio, self.csr)
+        DDSChecker.__init__(self, self.pulseio, self.csr,
+                            (self.ioctrl.dds0, self.ioctrl.dds1))
         SPIChecker.__init__(self, self.pulseio, self.csr)
 
     def elaborate(self, _):
@@ -50,10 +53,9 @@ class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SP
         m.submodules.pulseio = self.pulseio
         m.submodules.csr = self.csr
         m.submodules.fifos = self.fifos
-        m.submodules.ioctrl = ioctrl = IOController(self.pulseio, self.csr, self.fifos,
-                                                    clock_shift=self.clock_shift)
-        m.submodules.inst_runner = inst_runner = InstRunner(self.pulseio,
-                                                            self.csr, self.fifos, ioctrl,
+        m.submodules.ioctrl = self.ioctrl
+        m.submodules.inst_runner = inst_runner = InstRunner(self.pulseio, self.csr,
+                                                            self.fifos, self.ioctrl,
                                                             clock_shift=self.clock_shift)
         m.submodules._write_cmd = self._write_cmd
         m.submodules.read_result = self.read_result

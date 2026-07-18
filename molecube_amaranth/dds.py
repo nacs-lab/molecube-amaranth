@@ -115,6 +115,7 @@ class DDSController(Elaboratable):
 
         self.set = Method(i=SET_ARG)
         self.read_dds_cache = Method(i=[('id', 4), ('addr', 6)])
+        self.busy = Signal()
 
     def elaborate(self, plat):
         m = TModule()
@@ -339,7 +340,8 @@ class DDSController(Elaboratable):
                                  dds_cs.eq(0),
                                  dds_fud.eq(0),
                                  dds_addr.eq(0),
-                                 dds_data_out.eq(0)]
+                                 dds_data_out.eq(0),
+                                 self.busy.eq(0)]
                     assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
@@ -351,7 +353,8 @@ class DDSController(Elaboratable):
                     # Done reset
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  dds_cs.eq(0),
-                                 dds_reset.eq(0)]
+                                 dds_reset.eq(0),
+                                 self.busy.eq(0)]
                     assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
@@ -393,7 +396,8 @@ class DDSController(Elaboratable):
                 with m.Case(FSMState.RD_FINISH):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  dds_cs.eq(0),
-                                 dds_data_oe.eq(1)]
+                                 dds_data_oe.eq(1),
+                                 self.busy.eq(0)]
                     assign_xvalue(m, hold_cnt)
                     assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
@@ -411,6 +415,7 @@ class DDSController(Elaboratable):
         @def_method(m, self.set, combiner=oring_combiner, nonexclusive=True)
         def _(arg):
             m.d.sync += [fsm_state.eq(arg.state),
+                         self.busy.eq(1),
                          hold_cnt.eq(arg.hold_cnt),
                          hold_end.eq(arg.hold_end),
                          dds_rd.eq(arg.read),

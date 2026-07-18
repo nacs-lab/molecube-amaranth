@@ -114,26 +114,28 @@ class DDSControllerTester(Elaboratable):
     async def check_write1(self, sim, id, addr1, data1):
         self.set_cache(id, addr1 >> 1, data1)
         await DDSChecker.set1(sim, self.csr, self.port, id=id,
-                              addr1=addr1, data1=data1, fud=1)
-        await DDSChecker.idle(sim, self.port)
+                              addr1=addr1, data1=data1, fud=1, ctrl=self.controller)
+        await DDSChecker.idle(sim, self.port, ctrl=self.controller)
 
     async def check_write2(self, sim, id, addr1, data1, addr2, data2):
         self.set_cache(id, addr1 >> 1, data1)
         self.set_cache(id, addr2 >> 1, data2)
         await DDSChecker.set2(sim, self.csr, self.port, id=id, addr1=addr1, data1=data1,
-                              addr2=addr2, data2=data2, fud=1)
-        await DDSChecker.idle(sim, self.port)
+                              addr2=addr2, data2=data2, fud=1, ctrl=self.controller)
+        await DDSChecker.idle(sim, self.port, ctrl=self.controller)
 
     async def check_read1(self, sim, id, addr, data):
         self.set_cache(id, addr >> 1, data)
-        await DDSChecker.get1(sim, self.csr, self.port, id=id, addr=addr, data=data)
-        await DDSChecker.idle(sim, self.port)
+        await DDSChecker.get1(sim, self.csr, self.port, id=id, addr=addr, data=data,
+                              ctrl=self.controller)
+        await DDSChecker.idle(sim, self.port, ctrl=self.controller)
 
     async def check_read2(self, sim, id, addr, data):
         self.set_cache(id, addr >> 1, data & 0xffff)
         self.set_cache(id, (addr >> 1) + 1, data >> 16)
-        await DDSChecker.get2(sim, self.csr, self.port, id=id, addr=addr, data=data)
-        await DDSChecker.idle(sim, self.port)
+        await DDSChecker.get2(sim, self.csr, self.port, id=id, addr=addr, data=data,
+                              ctrl=self.controller)
+        await DDSChecker.idle(sim, self.port, ctrl=self.controller)
 
     async def read_cache(self, sim, id, addr):
         await self.read_dds_cache.call(sim, id=id, addr=addr)
@@ -151,7 +153,7 @@ class TestDDS(TestCaseWithSimulator):
         circ = DDSControllerTester()
 
         async def f(sim):
-            await DDSChecker.idle(sim, circ.port, 100)
+            await DDSChecker.idle(sim, circ.port, 100, ctrl=circ.controller)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -264,8 +266,9 @@ class TestDDS(TestCaseWithSimulator):
 
                 await circ.reset.call(sim, id=id)
 
-                await DDSChecker.reset(sim, circ.csr, circ.port, id=id)
-                await DDSChecker.idle(sim, circ.port)
+                await DDSChecker.reset(sim, circ.csr, circ.port, id=id,
+                                       ctrl=circ.controller)
+                await DDSChecker.idle(sim, circ.port, ctrl=circ.controller)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
