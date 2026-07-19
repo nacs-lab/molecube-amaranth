@@ -271,8 +271,9 @@ class ParserState:
         self.add_ttl_set16(bank8_1=bank8_1, val1=val1, bank8_2=bank8_2, val2=val2)
         return inst
 
-    def rand_dds_set16(self):
-        inst, kws = rand_inst(dds_set16_inst, addr=range(0, 1<<6, 2), dds_id=range(11))
+    def rand_dds_set16(self, bus_id=range(1)):
+        inst, kws = rand_inst(dds_set16_inst, bus_id=bus_id,
+                              addr=range(0, 1<<6, 2), dds_id=range(11))
         self.add_dds_set16(**kws)
         return inst
 
@@ -290,13 +291,14 @@ class ParserState:
         self.add_ttl_set32(bank16_1=bank16_1, val1=val1, bank16_2=bank16_2, val2=val2)
         return inst
 
-    def rand_dds_set32(self):
-        inst, kws = rand_inst(dds_set32_inst, addr=range(0, 1<<6, 4), dds_id=range(11))
+    def rand_dds_set32(self, bus_id=range(1)):
+        inst, kws = rand_inst(dds_set32_inst, bus_id=bus_id,
+                              addr=range(0, 1<<6, 4), dds_id=range(11))
         self.add_dds_set32(**kws)
         return inst
 
     def rand_dac(self):
-        inst, kws = rand_inst(dac_inst)
+        inst, kws = rand_inst(dac_inst, cycle=range(1))
         self.add_dac(**kws)
         return inst
 
@@ -738,14 +740,19 @@ class TestRunner(TestCaseWithSimulator):
 
     def test_long_wait(self):
         circ = RunnerTester(config(clock_shift=1))
+        state = ParserState()
+        state.dds_write_adsu = circ.csr.dds_write_adsu.init
+        state.ttl_mask = 0xff_ffff_ffff_ffff
 
         times = range(125, 135)
 
+        for t in times:
+            random.choice((state.rand_wait1,
+                           state.rand_wait2))(min_cycle=t, max_cycle=t)
+
         async def producer(sim):
-            for t in times:
-                await circ.write.call(sim, wait={'wait': {'cycle': t, 'is0': t == 0}})
-                for _ in range(t):
-                    await sim.tick()
+            for cmd in state.queue:
+                await circ.write.call(sim, **state.to_parsed_args(cmd))
 
         async def status_checker(sim):
             for _ in range(RUNNER_LATENCY + 2):
@@ -775,6 +782,73 @@ class TestRunner(TestCaseWithSimulator):
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
+            sim.add_testbench(status_checker)
+            sim.add_testbench(longwait_checker)
+            circ.add_testbenches(sim)
+
+    def test_long_wait2(self):
+        circ = RunnerTester(config(clock_shift=1))
+        state = ParserState()
+        state.dds_write_adsu = circ.csr.dds_write_adsu.init
+        state.ttl_mask = 0xff_ffff_ffff_ffff
+
+        times = range(125, 135)
+
+        for t in times:
+            random.choice((state.rand_dds_set16,
+                           state.rand_dds_set32))(bus_id=(0,))
+            random.choice((state.rand_dds_set16,
+                           state.rand_dds_set32))(bus_id=(1,))
+            state.rand_dac()
+            random.choice((state.rand_wait1,
+                           state.rand_wait2))(min_cycle=t, max_cycle=t)
+
+        async def producer(sim):
+            for cmd in state.queue:
+                await circ.write.call(sim, **state.to_parsed_args(cmd))
+
+        async def consumer(sim):
+            for _ in range(RUNNER_LATENCY + 1):
+                await sim.tick()
+            for cmd in state.checker_queue:
+                await state.run_checker_action(cmd, sim, circ)
+
+        async def status_checker(sim):
+            for _ in range(RUNNER_LATENCY + 2):
+                assert sim.get(circ.csr.dma_status) == 8 << 8
+                await sim.tick()
+            for t in times:
+                for _ in range(t + 1):
+                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    await sim.tick()
+            assert sim.get(circ.csr.dma_status) == 8 << 8
+
+        async def longwait_checker(sim):
+            for _ in range(RUNNER_LATENCY):
+                await sim.tick()
+            has_long_wait = False
+            for t in times:
+                assert sim.get(circ.runner.long_wait) == 0
+                assert sim.get(circ.ioctrl.dds0.busy) == 0
+                assert sim.get(circ.ioctrl.dds1.busy) == 0
+                assert sim.get(circ.ioctrl.spi.busy) == 0
+                await sim.tick()
+                for i in range(t):
+                    if i < 10:
+                        assert sim.get(circ.ioctrl.dds0.busy) == 1
+                        assert sim.get(circ.ioctrl.dds1.busy) == 1
+                        assert sim.get(circ.ioctrl.spi.busy) == 1
+                    if t - i > 128:
+                        assert sim.get(circ.runner.long_wait) == 1
+                        has_long_wait = True
+                    else:
+                        assert sim.get(circ.runner.long_wait) == 0
+                    await sim.tick()
+            assert has_long_wait
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
             sim.add_testbench(status_checker)
             sim.add_testbench(longwait_checker)
             circ.add_testbenches(sim)
