@@ -100,8 +100,8 @@ class ControlInterface(Elaboratable):
         def wr_dma_ttl(idx):
             return wr_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
 
-        with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
-            csr.dbg_result_generated.count(m)
+        # with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
+        #     csr.dbg_result_generated.count(m)
 
         dma_enabled = Signal()
         m.d.comb += dma_enabled.eq(csr.dma_ctrl.enabled)
@@ -111,24 +111,24 @@ class ControlInterface(Elaboratable):
         m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
         with Transaction().body(m):
             cmd = cmd_pre_fifo.read(m)
-            with m.If(dma_enabled):
-                self.fifos.cmd2_fifo.write(m, cmd)
-            with m.Else():
-                self.fifos.cmd_fifo.write(m, cmd)
+            # with m.If(dma_enabled):
+            #     self.fifos.cmd2_fifo.write(m, cmd)
+            # with m.Else():
+            #     self.fifos.cmd_fifo.write(m, cmd)
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
                                                     ('data', self.data_width),
                                                     ('strb', 4)], o=[])
 
-        @write_pipe.stage(m)
-        def _(idx, data):
-            with m.If(idx == 0x1f):
-                csr.dbg_inst_word_count.count(m)
-                cmd_pre_fifo.write(m, data)
-            with m.Elif(idx == 0x58):
-                self.fifos.dma_cmd_fifo.write(m, addr=Cat(C(0, 12), data[12:]),
-                                              blocks=data[1:11], first=data[0])
+        # @write_pipe.stage(m)
+        # def _(idx, data):
+        #     with m.If(idx == 0x1f):
+        #         csr.dbg_inst_word_count.count(m)
+        #         cmd_pre_fifo.write(m, data)
+        #     with m.Elif(idx == 0x58):
+        #         self.fifos.dma_cmd_fifo.write(m, addr=Cat(C(0, 12), data[12:]),
+        #                                       blocks=data[1:11], first=data[0])
 
         @write_pipe.stage(m)
         def _(idx, data, strb):
