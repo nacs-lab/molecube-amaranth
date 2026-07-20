@@ -30,15 +30,6 @@ class ControlInterface(Elaboratable):
         m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
                                                                  buffered=True)
 
-        # m.submodules.write_pipe = write_pipe = PipelineBuilder()
-        # start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
-        #                                             ('data', self.data_width),
-        #                                             ('strb', 4)], o=[])
-
-        # @write_pipe.stage(m)
-        # def _(idx, data, strb):
-        #     pass
-
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
             start_prewrite = prewrite_pipe.create_external(
@@ -51,15 +42,12 @@ class ControlInterface(Elaboratable):
                 valid = Signal()
                 m.d.top_comb += valid.eq(idx_prefix == self.prefix)
                 with m.If(last):
-                    write_iface.done(m, resp=Mux(valid, 0, 3), id=id)
-                # with m.If(valid):
-                #     start_write(m, idx=idx[:self.valid_width - 2], data=data, strb=strb)
+                    write_iface.done(m, resp=0, id=id)
 
         with Transaction().body(m):
             req = write_iface.get(m)
             addr = req.addr
             if self.valid_width == self.addr_width:
-                # start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
                 with m.If(req.last):
                     write_iface.done(m, id=req.id)
             else:
@@ -72,16 +60,9 @@ class ControlInterface(Elaboratable):
                                                   ('id', self.id_width),
                                                   ('last', 1)], o=[])
 
-        # @read_pipe.stage(m)
-        # def _():
-        #     pass
-
-        # read_pipe.fifo(depth=2)
-
         @read_pipe.stage(m, o=[('idx', self.valid_width - 2), ('resp', 2)])
         def _(idx):
-            return dict(idx=idx[:self.valid_width - 2],
-                        resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
+            return dict(idx=idx[:self.valid_width - 2], resp=0)
 
         @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in range(self.valid_width - 2)])
         def _(idx):
@@ -155,7 +136,6 @@ class ControlInterface(Elaboratable):
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
-        # stage_state[0x1f] = lambda arg: arg.fifo_data
 
         def get_stage(arg, i):
             if i in stage_state:
@@ -176,8 +156,8 @@ class ControlInterface(Elaboratable):
             nbatches = (nidx_outs + max_batch_sz - 1) // max_batch_sz
             batch_sz = (nidx_outs + nbatches - 1) // nbatches
 
-            if bit == 2:
-                read_pipe.fifo(depth=2)
+            # if bit == 2:
+            #     read_pipe.fifo(depth=2)
 
             print(f"bit: {bit}, idx_out_width: {idx_out_width}, nidx_outs: {nidx_outs}")
 
