@@ -36,15 +36,8 @@ class TopLevel(Elaboratable):
         m.submodules.regs = regs = Registers(self.config)
         fifos = None
         ioctrl = None
-        # m.submodules.fifos = fifos = Fifos(32)
-
-        # m.submodules.pulseio = pulseio = PulseIO.from_config(plat, self.config)
-        # m.submodules.ioctrl = ioctrl = IOController(pulseio, regs, fifos,
-        #                                             clock_shift=self.config.CLOCK_SHIFT)
         m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,
                                                                 ioctrl, prefix=0x7300_0000,
                                                                 valid_width=9)
-        # m.submodules.inst_runner = inst_runner = InstRunner(
-        #     pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
 
         return m

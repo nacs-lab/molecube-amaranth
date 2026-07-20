@@ -43,7 +43,6 @@ class ControlInterface(Elaboratable):
                                                                  buffered=True)
 
         wr_shadow = SimpleNamespace()
-        # rd_shadow = SimpleNamespace()
 
         csr = self.csr_regs
 
@@ -132,102 +131,106 @@ class ControlInterface(Elaboratable):
 
         @write_pipe.stage(m)
         def _(idx, data, strb):
-            with m.Switch(idx):
-                with m.Case(0x00):
-                    axi_write_reg(m, wr_ttl_hi(0), data, strb)
-                with m.Case(0x01):
-                    axi_write_reg(m, wr_ttl_lo(0), data, strb)
-                with m.Case(0x03):
-                    axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
-                # with m.Case(0x04):
-                #     self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x05):
-                #     self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
-                #                                     data[:8]))
+            pass
 
-                with m.Case(0x10):
-                    axi_write_reg(m, wr_ttl_hi(1), data, strb)
-                with m.Case(0x11):
-                    axi_write_reg(m, wr_ttl_lo(1), data, strb)
-                with m.Case(0x12):
-                    axi_write_reg(m, wr_ttl_hi(2), data, strb)
-                with m.Case(0x13):
-                    axi_write_reg(m, wr_ttl_lo(2), data, strb)
-                with m.Case(0x14):
-                    axi_write_reg(m, wr_ttl_hi(3), data, strb)
-                with m.Case(0x15):
-                    axi_write_reg(m, wr_ttl_lo(3), data, strb)
-                with m.Case(0x16):
-                    axi_write_reg(m, wr_ttl_hi(4), data, strb)
-                with m.Case(0x17):
-                    axi_write_reg(m, wr_ttl_lo(4), data, strb)
-                with m.Case(0x18):
-                    axi_write_reg(m, wr_ttl_hi(5), data, strb)
-                with m.Case(0x19):
-                    axi_write_reg(m, wr_ttl_lo(5), data, strb)
-                with m.Case(0x1a):
-                    axi_write_reg(m, wr_ttl_hi(6), data, strb)
-                with m.Case(0x1b):
-                    axi_write_reg(m, wr_ttl_lo(6), data, strb)
-                with m.Case(0x1c):
-                    axi_write_reg(m, wr_ttl_hi(7), data, strb)
-                with m.Case(0x1d):
-                    axi_write_reg(m, wr_ttl_lo(7), data, strb)
-                with m.Case(0x1e):
-                    axi_write_reg(m, wr_shadow.loopback, data, strb)
+        # @write_pipe.stage(m)
+        # def _(idx, data, strb):
+        #     with m.Switch(idx):
+        #         with m.Case(0x00):
+        #             axi_write_reg(m, wr_ttl_hi(0), data, strb)
+        #         with m.Case(0x01):
+        #             axi_write_reg(m, wr_ttl_lo(0), data, strb)
+        #         with m.Case(0x03):
+        #             axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
+        #         # with m.Case(0x04):
+        #         #     self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x05):
+        #         #     self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
+        #         #                                     data[:8]))
 
-        @write_pipe.stage(m)
-        def _(idx, data, strb):
-            with m.Switch(idx):
-                # with m.Case(0x40):
-                #     self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x41):
-                #     self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x42):
-                #     self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x43):
-                #     self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x44):
-                #     self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x45):
-                #     self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                # with m.Case(0x46):
-                #     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
-                #                                       byte=data[16:18])
-                with m.Case(0x48):
-                    axi_write_reg(m, wr_dma_ttl(0), data, strb)
-                with m.Case(0x49):
-                    axi_write_reg(m, wr_dma_ttl(1), data, strb)
-                with m.Case(0x4a):
-                    axi_write_reg(m, wr_dma_ttl(2), data, strb)
-                with m.Case(0x4b):
-                    axi_write_reg(m, wr_dma_ttl(3), data, strb)
-                with m.Case(0x4c):
-                    axi_write_reg(m, wr_dma_ttl(4), data, strb)
-                with m.Case(0x4d):
-                    axi_write_reg(m, wr_dma_ttl(5), data, strb)
-                with m.Case(0x4e):
-                    axi_write_reg(m, wr_dma_ttl(6), data, strb)
-                with m.Case(0x4f):
-                    axi_write_reg(m, wr_dma_ttl(7), data, strb)
+        #         with m.Case(0x10):
+        #             axi_write_reg(m, wr_ttl_hi(1), data, strb)
+        #         with m.Case(0x11):
+        #             axi_write_reg(m, wr_ttl_lo(1), data, strb)
+        #         with m.Case(0x12):
+        #             axi_write_reg(m, wr_ttl_hi(2), data, strb)
+        #         with m.Case(0x13):
+        #             axi_write_reg(m, wr_ttl_lo(2), data, strb)
+        #         with m.Case(0x14):
+        #             axi_write_reg(m, wr_ttl_hi(3), data, strb)
+        #         with m.Case(0x15):
+        #             axi_write_reg(m, wr_ttl_lo(3), data, strb)
+        #         with m.Case(0x16):
+        #             axi_write_reg(m, wr_ttl_hi(4), data, strb)
+        #         with m.Case(0x17):
+        #             axi_write_reg(m, wr_ttl_lo(4), data, strb)
+        #         with m.Case(0x18):
+        #             axi_write_reg(m, wr_ttl_hi(5), data, strb)
+        #         with m.Case(0x19):
+        #             axi_write_reg(m, wr_ttl_lo(5), data, strb)
+        #         with m.Case(0x1a):
+        #             axi_write_reg(m, wr_ttl_hi(6), data, strb)
+        #         with m.Case(0x1b):
+        #             axi_write_reg(m, wr_ttl_lo(6), data, strb)
+        #         with m.Case(0x1c):
+        #             axi_write_reg(m, wr_ttl_hi(7), data, strb)
+        #         with m.Case(0x1d):
+        #             axi_write_reg(m, wr_ttl_lo(7), data, strb)
+        #         with m.Case(0x1e):
+        #             axi_write_reg(m, wr_shadow.loopback, data, strb)
 
-                with m.Case(0x50):
-                    axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
-                with m.Case(0x51):
-                    axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
-                # with m.Case(0x52):
-                #     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-                # with m.Case(0x53):
-                #     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-                with m.Case(0x59):
-                    axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
+        # @write_pipe.stage(m)
+        # def _(idx, data, strb):
+        #     with m.Switch(idx):
+        #         # with m.Case(0x40):
+        #         #     self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x41):
+        #         #     self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x42):
+        #         #     self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x43):
+        #         #     self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x44):
+        #         #     self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x45):
+        #         #     self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         # with m.Case(0x46):
+        #         #     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
+        #         #                                       byte=data[16:18])
+        #         with m.Case(0x48):
+        #             axi_write_reg(m, wr_dma_ttl(0), data, strb)
+        #         with m.Case(0x49):
+        #             axi_write_reg(m, wr_dma_ttl(1), data, strb)
+        #         with m.Case(0x4a):
+        #             axi_write_reg(m, wr_dma_ttl(2), data, strb)
+        #         with m.Case(0x4b):
+        #             axi_write_reg(m, wr_dma_ttl(3), data, strb)
+        #         with m.Case(0x4c):
+        #             axi_write_reg(m, wr_dma_ttl(4), data, strb)
+        #         with m.Case(0x4d):
+        #             axi_write_reg(m, wr_dma_ttl(5), data, strb)
+        #         with m.Case(0x4e):
+        #             axi_write_reg(m, wr_dma_ttl(6), data, strb)
+        #         with m.Case(0x4f):
+        #             axi_write_reg(m, wr_dma_ttl(7), data, strb)
+
+        #         with m.Case(0x50):
+        #             axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
+        #         with m.Case(0x51):
+        #             axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
+        #         # with m.Case(0x52):
+        #         #     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+        #         # with m.Case(0x53):
+        #         #     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+        #         with m.Case(0x59):
+        #             axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -352,71 +355,6 @@ class ControlInterface(Elaboratable):
 61: C(0, 32),
 62: C(0, 32),
 63: C(0, 32),
-                # 0x00: C(0, 32), # rd_ttl_hi(0),
-                # 0x01: C(0, 32), # rd_ttl_lo(0),
-                # 0x02: C(0, 32), # rd_shadow.timing_status,
-                # 0x03: C(0, 32), # rd_shadow.timing_ctrl,
-                # 0x04: C(0, 32), # ttl_out_reg(0),
-                # 0x05: C(0, 32), # rd_shadow.clockout_div,
-                # 0x06: C(0, 32), # MAJOR_VERSION,
-                # 0x07: C(0, 32), # MINOR_VERSION,
-                # 0x10: C(0, 32), # rd_ttl_hi(1),
-                # 0x11: C(0, 32), # rd_ttl_lo(1),
-                # 0x12: C(0, 32), # rd_ttl_hi(2),
-                # 0x13: C(0, 32), # rd_ttl_lo(2),
-                # 0x14: C(0, 32), # rd_ttl_hi(3),
-                # 0x15: C(0, 32), # rd_ttl_lo(3),
-                # 0x16: C(0, 32), # rd_ttl_hi(4),
-                # 0x17: C(0, 32), # rd_ttl_lo(4),
-                # 0x18: C(0, 32), # rd_ttl_hi(5),
-                # 0x19: C(0, 32), # rd_ttl_lo(5),
-                # 0x1a: C(0, 32), # rd_ttl_hi(6),
-                # 0x1b: C(0, 32), # rd_ttl_lo(6),
-                # 0x1c: C(0, 32), # rd_ttl_hi(7),
-                # 0x1d: C(0, 32), # rd_ttl_lo(7),
-                # 0x1e: C(0, 32), # rd_shadow.loopback,
-                # 0x20: C(0, 32), # rd_shadow.dbg_inst_word_count,
-                # 0x21: C(0, 32), # rd_shadow.dbg_inst_count,
-                # 0x22: C(0, 32), # rd_shadow.dbg_ttl_count,
-                # 0x23: C(0, 32), # rd_shadow.dbg_dds_count,
-                # 0x24: C(0, 32), # rd_shadow.dbg_wait_count,
-                # 0x25: C(0, 32), # rd_shadow.dbg_clear_count,
-                # 0x26: C(0, 32), # rd_shadow.dbg_loopback_count,
-                # 0x27: C(0, 32), # rd_shadow.dbg_clock_count,
-                # 0x28: C(0, 32), # rd_shadow.dbg_spi_count,
-                # 0x29: C(0, 32), # rd_shadow.dbg_underflow_cycle,
-                # 0x2a: C(0, 32), # rd_shadow.dbg_inst_cycle,
-                # # 0x2b: C(0, 32), # rd_shadow.dbg_ttl_cycle,
-                # # 0x2c: C(0, 32), # rd_shadow.dbg_wait_cycle,
-                # # 0x2d: C(0, 32), # rd_shadow.dbg_result_overflow_count,
-                # 0x2e: C(0, 32), # rd_shadow.dbg_result_count,
-                # 0x2f: C(0, 32), # rd_shadow.dbg_result_generated,
-                # 0x30: C(0, 32), # rd_shadow.dbg_result_consumed,
-
-                # 0x40: C(0, 32), # ttl_out_reg(1),
-                # 0x41: C(0, 32), # ttl_out_reg(2),
-                # 0x42: C(0, 32), # ttl_out_reg(3),
-                # 0x43: C(0, 32), # ttl_out_reg(4),
-                # 0x44: C(0, 32), # ttl_out_reg(5),
-                # 0x45: C(0, 32), # ttl_out_reg(6),
-                # 0x46: C(0, 32), # ttl_out_reg(7),
-
-                # # 0x48: C(0, 32), # rd_dma_ttl(0),
-                # # 0x49: C(0, 32), # rd_dma_ttl(1),
-                # # 0x4a: C(0, 32), # rd_dma_ttl(2),
-                # # 0x4b: C(0, 32), # rd_dma_ttl(3),
-                # # 0x4c: C(0, 32), # rd_dma_ttl(4),
-                # # 0x4d: C(0, 32), # rd_dma_ttl(5),
-                # # 0x4e: C(0, 32), # rd_dma_ttl(6),
-                # 0x4f: C(0, 32), # rd_dma_ttl(7),
-
-                # 0x50: C(0, 32), # rd_shadow.dds_timing1,
-                # 0x51: C(0, 32), # rd_shadow.dds_timing2,
-                # 0x52: C(0, 32), # rd_shadow.dds0_reg,
-                # 0x53: C(0, 32), # rd_shadow.dds1_reg,
-
-                # # 0x58: C(0, 32), # rd_shadow.dma_status,
-                # # 0x59: C(0, 32), # rd_shadow.dma_ctrl,
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
