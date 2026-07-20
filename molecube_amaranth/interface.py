@@ -30,14 +30,14 @@ class ControlInterface(Elaboratable):
         m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
                                                                  buffered=True)
 
-        m.submodules.write_pipe = write_pipe = PipelineBuilder()
-        start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
-                                                    ('data', self.data_width),
-                                                    ('strb', 4)], o=[])
+        # m.submodules.write_pipe = write_pipe = PipelineBuilder()
+        # start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
+        #                                             ('data', self.data_width),
+        #                                             ('strb', 4)], o=[])
 
-        @write_pipe.stage(m)
-        def _(idx, data, strb):
-            pass
+        # @write_pipe.stage(m)
+        # def _(idx, data, strb):
+        #     pass
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -52,14 +52,14 @@ class ControlInterface(Elaboratable):
                 m.d.top_comb += valid.eq(idx_prefix == self.prefix)
                 with m.If(last):
                     write_iface.done(m, resp=Mux(valid, 0, 3), id=id)
-                with m.If(valid):
-                    start_write(m, idx=idx[:self.valid_width - 2], data=data, strb=strb)
+                # with m.If(valid):
+                #     start_write(m, idx=idx[:self.valid_width - 2], data=data, strb=strb)
 
         with Transaction().body(m):
             req = write_iface.get(m)
             addr = req.addr
             if self.valid_width == self.addr_width:
-                start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
+                # start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
                 with m.If(req.last):
                     write_iface.done(m, id=req.id)
             else:
@@ -72,11 +72,11 @@ class ControlInterface(Elaboratable):
                                                   ('id', self.id_width),
                                                   ('last', 1)], o=[])
 
-        @read_pipe.stage(m)
-        def _():
-            pass
+        # @read_pipe.stage(m)
+        # def _():
+        #     pass
 
-        read_pipe.fifo(depth=2)
+        # read_pipe.fifo(depth=2)
 
         @read_pipe.stage(m, o=[('idx', self.valid_width - 2), ('resp', 2)])
         def _(idx):
