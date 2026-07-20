@@ -33,7 +33,8 @@ class TopLevel(Elaboratable):
         reset_sync = ResetSynchronizer(reset, domain="sync")
         m.submodules.reset_sync = reset_sync
 
-        m.submodules.regs = regs = Registers(self.config)
+        # m.submodules.regs = regs = Registers(self.config)
+        regs = None
         fifos = None
         ioctrl = None
         m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,

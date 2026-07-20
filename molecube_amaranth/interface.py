@@ -7,18 +7,6 @@ from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
 from transactron.lib import BasicFifo
 
-from types import SimpleNamespace
-
-from .config import MAJOR_VERSION, MINOR_VERSION
-from .csr import Registers
-from .utils import xvalue, reg_chain
-
-def relaxed_read_shadow(m, reg):
-    r2 = Signal.like(reg)
-    # r2.attrs["molecube.vivado.false_path_to"] = "TRUE"
-    m.d.sync += r2.eq(reg)
-    return r2
-
 class ControlInterface(Elaboratable):
     def __init__(self, axi, csr_regs, fifos, ioctrl, prefix=0, valid_width=None):
         self.axi = axi
@@ -42,195 +30,14 @@ class ControlInterface(Elaboratable):
         m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
                                                                  buffered=True)
 
-        wr_shadow = SimpleNamespace()
-
-        csr = self.csr_regs
-
-        for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'dma_ttl_mask', 'timing_ctrl',
-                         'dds_timing1', 'dds_timing2', 'loopback', 'dma_ctrl']:
-            if (reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask' or
-                reg_name == 'dma_ttl_mask'):
-                rd_real_reg = wr_real_reg = getattr(csr, reg_name)
-            elif reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
-                # Let the property getter return different padding registers for read/write
-                rd_real_reg = getattr(csr, reg_name)
-                wr_real_reg = getattr(csr, reg_name)
-            else:
-                rd_real_reg = wr_real_reg = getattr(csr, reg_name)
-            wr_real_reg = Signal.cast(wr_real_reg)
-            rd_real_reg = Signal.cast(rd_real_reg)
-            if reg_name in ('ttl_hi_mask', 'ttl_lo_mask', 'dma_ttl_mask', 'dds_timing1',
-                            'dds_timing2', 'loopback'):
-                rd_reg = relaxed_read_shadow(m, rd_real_reg)
-            else:
-                rd_reg, _ = reg_chain(m, input=rd_real_reg, levels=2)
-            _, wr_reg = reg_chain(m, output=wr_real_reg, levels=2)
-            setattr(wr_shadow, reg_name, wr_reg)
-            # setattr(rd_shadow, reg_name, rd_reg)
-
-        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
-                         'dds0_reg', 'dds1_reg', 'dma_status']:
-            real_reg = getattr(csr, reg_name)
-            if reg_name in ('ttl_out', 'clockout_div', 'dbg_result_count',
-                            'dds0_reg', 'dds1_reg'):
-                rd_reg = relaxed_read_shadow(m, real_reg)
-            else:
-                rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
-            # setattr(rd_shadow, reg_name, rd_reg)
-
-        # for (k, c) in csr.all_counters.items():
-        #     setattr(rd_shadow, k, relaxed_read_shadow(m, c.value))
-
-        # def rd_ttl_hi(idx):
-        #     return rd_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
-        # def rd_ttl_lo(idx):
-        #     return rd_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
-
-        def wr_ttl_hi(idx):
-            return wr_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
-        def wr_ttl_lo(idx):
-            return wr_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
-
-        # def ttl_out_reg(idx):
-        #     return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
-
-        # def rd_dma_ttl(idx):
-        #     return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
-        def wr_dma_ttl(idx):
-            return wr_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
-
-        # with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
-        #     csr.dbg_result_generated.count(m)
-
-        dma_enabled = Signal()
-        m.d.comb += dma_enabled.eq(csr.dma_ctrl.enabled)
-        # dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
-
-        # Buffer for command fifo to simplify write combinational logic
-        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
-        with Transaction().body(m):
-            cmd = cmd_pre_fifo.read(m)
-            # with m.If(dma_enabled):
-            #     self.fifos.cmd2_fifo.write(m, cmd)
-            # with m.Else():
-            #     self.fifos.cmd_fifo.write(m, cmd)
-
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
                                                     ('data', self.data_width),
                                                     ('strb', 4)], o=[])
 
-        # @write_pipe.stage(m)
-        # def _(idx, data):
-        #     with m.If(idx == 0x1f):
-        #         csr.dbg_inst_word_count.count(m)
-        #         cmd_pre_fifo.write(m, data)
-        #     with m.Elif(idx == 0x58):
-        #         self.fifos.dma_cmd_fifo.write(m, addr=Cat(C(0, 12), data[12:]),
-        #                                       blocks=data[1:11], first=data[0])
-
         @write_pipe.stage(m)
         def _(idx, data, strb):
             pass
-
-        # @write_pipe.stage(m)
-        # def _(idx, data, strb):
-        #     with m.Switch(idx):
-        #         with m.Case(0x00):
-        #             axi_write_reg(m, wr_ttl_hi(0), data, strb)
-        #         with m.Case(0x01):
-        #             axi_write_reg(m, wr_ttl_lo(0), data, strb)
-        #         with m.Case(0x03):
-        #             axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
-        #         # with m.Case(0x04):
-        #         #     self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x05):
-        #         #     self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
-        #         #                                     data[:8]))
-
-        #         with m.Case(0x10):
-        #             axi_write_reg(m, wr_ttl_hi(1), data, strb)
-        #         with m.Case(0x11):
-        #             axi_write_reg(m, wr_ttl_lo(1), data, strb)
-        #         with m.Case(0x12):
-        #             axi_write_reg(m, wr_ttl_hi(2), data, strb)
-        #         with m.Case(0x13):
-        #             axi_write_reg(m, wr_ttl_lo(2), data, strb)
-        #         with m.Case(0x14):
-        #             axi_write_reg(m, wr_ttl_hi(3), data, strb)
-        #         with m.Case(0x15):
-        #             axi_write_reg(m, wr_ttl_lo(3), data, strb)
-        #         with m.Case(0x16):
-        #             axi_write_reg(m, wr_ttl_hi(4), data, strb)
-        #         with m.Case(0x17):
-        #             axi_write_reg(m, wr_ttl_lo(4), data, strb)
-        #         with m.Case(0x18):
-        #             axi_write_reg(m, wr_ttl_hi(5), data, strb)
-        #         with m.Case(0x19):
-        #             axi_write_reg(m, wr_ttl_lo(5), data, strb)
-        #         with m.Case(0x1a):
-        #             axi_write_reg(m, wr_ttl_hi(6), data, strb)
-        #         with m.Case(0x1b):
-        #             axi_write_reg(m, wr_ttl_lo(6), data, strb)
-        #         with m.Case(0x1c):
-        #             axi_write_reg(m, wr_ttl_hi(7), data, strb)
-        #         with m.Case(0x1d):
-        #             axi_write_reg(m, wr_ttl_lo(7), data, strb)
-        #         with m.Case(0x1e):
-        #             axi_write_reg(m, wr_shadow.loopback, data, strb)
-
-        # @write_pipe.stage(m)
-        # def _(idx, data, strb):
-        #     with m.Switch(idx):
-        #         # with m.Case(0x40):
-        #         #     self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x41):
-        #         #     self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x42):
-        #         #     self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x43):
-        #         #     self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x44):
-        #         #     self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x45):
-        #         #     self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         # with m.Case(0x46):
-        #         #     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
-        #         #                                       byte=data[16:18])
-        #         with m.Case(0x48):
-        #             axi_write_reg(m, wr_dma_ttl(0), data, strb)
-        #         with m.Case(0x49):
-        #             axi_write_reg(m, wr_dma_ttl(1), data, strb)
-        #         with m.Case(0x4a):
-        #             axi_write_reg(m, wr_dma_ttl(2), data, strb)
-        #         with m.Case(0x4b):
-        #             axi_write_reg(m, wr_dma_ttl(3), data, strb)
-        #         with m.Case(0x4c):
-        #             axi_write_reg(m, wr_dma_ttl(4), data, strb)
-        #         with m.Case(0x4d):
-        #             axi_write_reg(m, wr_dma_ttl(5), data, strb)
-        #         with m.Case(0x4e):
-        #             axi_write_reg(m, wr_dma_ttl(6), data, strb)
-        #         with m.Case(0x4f):
-        #             axi_write_reg(m, wr_dma_ttl(7), data, strb)
-
-        #         with m.Case(0x50):
-        #             axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
-        #         with m.Case(0x51):
-        #             axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
-        #         # with m.Case(0x52):
-        #         #     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-        #         # with m.Case(0x53):
-        #         #     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-        #         with m.Case(0x59):
-        #             axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
@@ -275,16 +82,6 @@ class ControlInterface(Elaboratable):
         def _(idx):
             return dict(idx=idx[:self.valid_width - 2],
                         resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
-
-        # @read_pipe.stage(m, o=[('fifo_data', self.data_width)])
-        # def _(idx, resp):
-        #     res = Signal(self.data_width)
-        #     with m.If((idx == 0x1f) & ~resp[0]):
-        #         csr.dbg_result_consumed.count(m)
-        #         m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
-        #     with m.Else():
-        #         m.d.av_comb += res.eq(xvalue(m, self.data_width))
-        #     return dict(fifo_data=res)
 
         @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in range(self.valid_width - 2)])
         def _(idx):
@@ -397,8 +194,6 @@ class ControlInterface(Elaboratable):
                     else:
                         layout_out.append((f'data_{bit}_{idx_out_val}', self.data_width))
                     if bit == 0:
-                        # if idx_out_val == 0x1f >> 1:
-                        #     layout_in.append(('fifo_data', self.data_width))
                         continue
                     if (idx_out_val * 2) in stage_state:
                         layout_in.append((f'data_{bit - 1}_{idx_out_val * 2}', self.data_width))
@@ -425,12 +220,6 @@ class ControlInterface(Elaboratable):
                     return res
 
             stage_state = next_stage_state
-
-        # read_pipe.fifo(depth=2)
-
-        # @read_pipe.stage(m)
-        # def _():
-        #     pass
 
         @read_pipe.stage(m)
         def _(data, resp, id, last):
