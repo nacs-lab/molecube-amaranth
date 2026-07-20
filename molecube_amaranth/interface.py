@@ -51,7 +51,7 @@ class ControlInterface(Elaboratable):
                          'dds_timing1', 'dds_timing2', 'loopback', 'dma_ctrl']:
             if (reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask' or
                 reg_name == 'dma_ttl_mask'):
-                rd_real_reg = wr_real_reg = getattr(csr, reg_name)[:self.ioctrl.nttlout]
+                rd_real_reg = wr_real_reg = getattr(csr, reg_name)
             elif reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
                 # Let the property getter return different padding registers for read/write
                 rd_real_reg = getattr(csr, reg_name)
@@ -139,12 +139,12 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_ttl_lo(0), data, strb)
                 with m.Case(0x03):
                     axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
-                with m.Case(0x04):
-                    self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x05):
-                    self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
-                                                    data[:8]))
+                # with m.Case(0x04):
+                #     self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x05):
+                #     self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
+                #                                     data[:8]))
 
                 with m.Case(0x10):
                     axi_write_reg(m, wr_ttl_hi(1), data, strb)
@@ -180,27 +180,27 @@ class ControlInterface(Elaboratable):
         @write_pipe.stage(m)
         def _(idx, data, strb):
             with m.Switch(idx):
-                with m.Case(0x40):
-                    self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x41):
-                    self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x42):
-                    self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x43):
-                    self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x44):
-                    self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x45):
-                    self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x46):
-                    self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
+                # with m.Case(0x40):
+                #     self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x41):
+                #     self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x42):
+                #     self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x43):
+                #     self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x44):
+                #     self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x45):
+                #     self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
+                # with m.Case(0x46):
+                #     self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
+                #                                       byte=data[16:18])
                 with m.Case(0x48):
                     axi_write_reg(m, wr_dma_ttl(0), data, strb)
                 with m.Case(0x49):
@@ -222,10 +222,10 @@ class ControlInterface(Elaboratable):
                     axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
                 with m.Case(0x51):
                     axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
-                with m.Case(0x52):
-                    self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
-                with m.Case(0x53):
-                    self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                # with m.Case(0x52):
+                #     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                # with m.Case(0x53):
+                #     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
                 with m.Case(0x59):
                     axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
 
@@ -488,11 +488,11 @@ class ControlInterface(Elaboratable):
 
             stage_state = next_stage_state
 
-        read_pipe.fifo(depth=2)
+        # read_pipe.fifo(depth=2)
 
-        @read_pipe.stage(m)
-        def _():
-            pass
+        # @read_pipe.stage(m)
+        # def _():
+        #     pass
 
         @read_pipe.stage(m)
         def _(data, resp, id, last):

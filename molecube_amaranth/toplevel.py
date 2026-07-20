@@ -42,7 +42,7 @@ class TopLevel(Elaboratable):
         m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,
                                                                 ioctrl, prefix=0x7300_0000,
                                                                 valid_width=9)
-        m.submodules.inst_runner = inst_runner = InstRunner(
-            pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
+        # m.submodules.inst_runner = inst_runner = InstRunner(
+        #     pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
 
         return m
