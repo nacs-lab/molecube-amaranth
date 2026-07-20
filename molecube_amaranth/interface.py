@@ -156,8 +156,8 @@ class ControlInterface(Elaboratable):
             nbatches = (nidx_outs + max_batch_sz - 1) // max_batch_sz
             batch_sz = (nidx_outs + nbatches - 1) // nbatches
 
-            # if bit == 2:
-            #     read_pipe.fifo(depth=2)
+            if bit == 2:
+                read_pipe.fifo(depth=2)
 
             print(f"bit: {bit}, idx_out_width: {idx_out_width}, nidx_outs: {nidx_outs}")
 
