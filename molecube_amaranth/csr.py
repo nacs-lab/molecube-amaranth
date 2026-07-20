@@ -71,8 +71,8 @@ class Registers(Elaboratable):
         self.dma_ctrl = Signal(DMACtrl)
 
         # Semistatic
-        self.dma_ttl_mask.attrs["molecube.vivado.false_path_from"] = "TRUE"
-        self.dma_ttl_mask.attrs["molecube.vivado.false_path_to"] = "TRUE"
+        # self.dma_ttl_mask.attrs["molecube.vivado.false_path_from"] = "TRUE"
+        # self.dma_ttl_mask.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         def dds_cycle(cycle_2):
             return (cycle_2 >> (1 - config.CLOCK_SHIFT)) - 1
@@ -96,8 +96,8 @@ class Registers(Elaboratable):
             r = getattr(self, name)
             r0 = Signal(name=f'{name}_iszero')
             setattr(self, f'{name}_iszero', r0)
-            r.attrs["molecube.vivado.false_path_from"] = "TRUE"
-            r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
+            # r.attrs["molecube.vivado.false_path_from"] = "TRUE"
+            # r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
 
         self.dbg_result_count = Signal(self.REG_WIDTH)
 

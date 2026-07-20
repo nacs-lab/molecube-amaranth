@@ -54,14 +54,15 @@ class _XValueGenerator(Elaboratable):
         )
 
 def xvalue(m, T):
-    gen = _XValueGenerator(Signal(T))
-    m.submodules += gen
-    return gen.value
+    return Signal(T)
+    # gen = _XValueGenerator(Signal(T))
+    # m.submodules += gen
+    # return gen.value
 
 def assign_xvalue(m, s, *, domain='sync'):
-    gen = _XValueGenerator(Signal.like(s))
-    m.submodules += gen
-    m.d[domain] += s.eq(gen.value)
+    # gen = _XValueGenerator(Signal.like(s))
+    # m.submodules += gen
+    m.d[domain] += s.eq(Signal.like(s))
 
 def oring_combiner(m, args, runs):
     arg0 = args[0]

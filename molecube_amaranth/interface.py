@@ -15,7 +15,7 @@ from .utils import xvalue, reg_chain
 
 def relaxed_read_shadow(m, reg):
     r2 = Signal.like(reg)
-    r2.attrs["molecube.vivado.false_path_to"] = "TRUE"
+    # r2.attrs["molecube.vivado.false_path_to"] = "TRUE"
     m.d.sync += r2.eq(reg)
     return r2
 
@@ -43,7 +43,7 @@ class ControlInterface(Elaboratable):
                                                                  buffered=True)
 
         wr_shadow = SimpleNamespace()
-        rd_shadow = SimpleNamespace()
+        # rd_shadow = SimpleNamespace()
 
         csr = self.csr_regs
 
@@ -67,7 +67,7 @@ class ControlInterface(Elaboratable):
                 rd_reg, _ = reg_chain(m, input=rd_real_reg, levels=2)
             _, wr_reg = reg_chain(m, output=wr_real_reg, levels=2)
             setattr(wr_shadow, reg_name, wr_reg)
-            setattr(rd_shadow, reg_name, rd_reg)
+            # setattr(rd_shadow, reg_name, rd_reg)
 
         for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
                          'dds0_reg', 'dds1_reg', 'dma_status']:
@@ -77,26 +77,26 @@ class ControlInterface(Elaboratable):
                 rd_reg = relaxed_read_shadow(m, real_reg)
             else:
                 rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
-            setattr(rd_shadow, reg_name, rd_reg)
+            # setattr(rd_shadow, reg_name, rd_reg)
 
-        for (k, c) in csr.all_counters.items():
-            setattr(rd_shadow, k, relaxed_read_shadow(m, c.value))
+        # for (k, c) in csr.all_counters.items():
+        #     setattr(rd_shadow, k, relaxed_read_shadow(m, c.value))
 
-        def rd_ttl_hi(idx):
-            return rd_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
-        def rd_ttl_lo(idx):
-            return rd_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
+        # def rd_ttl_hi(idx):
+        #     return rd_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
+        # def rd_ttl_lo(idx):
+        #     return rd_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
 
         def wr_ttl_hi(idx):
             return wr_shadow.ttl_hi_mask[idx * 32:(idx + 1) * 32]
         def wr_ttl_lo(idx):
             return wr_shadow.ttl_lo_mask[idx * 32:(idx + 1) * 32]
 
-        def ttl_out_reg(idx):
-            return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
+        # def ttl_out_reg(idx):
+        #     return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
 
-        def rd_dma_ttl(idx):
-            return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
+        # def rd_dma_ttl(idx):
+        #     return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
         def wr_dma_ttl(idx):
             return wr_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
 
@@ -105,7 +105,7 @@ class ControlInterface(Elaboratable):
 
         dma_enabled = Signal()
         m.d.comb += dma_enabled.eq(csr.dma_ctrl.enabled)
-        dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
+        # dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         # Buffer for command fifo to simplify write combinational logic
         m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
@@ -273,96 +273,160 @@ class ControlInterface(Elaboratable):
             return dict(idx=idx[:self.valid_width - 2],
                         resp=Mux((idx >> (self.valid_width - 2)) == self.prefix, 0, 3))
 
-        @read_pipe.stage(m, o=[('fifo_data', self.data_width)])
-        def _(idx, resp):
-            res = Signal(self.data_width)
-            with m.If((idx == 0x1f) & ~resp[0]):
-                csr.dbg_result_consumed.count(m)
-                m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
-            with m.Else():
-                m.d.av_comb += res.eq(xvalue(m, self.data_width))
-            return dict(fifo_data=res)
+        # @read_pipe.stage(m, o=[('fifo_data', self.data_width)])
+        # def _(idx, resp):
+        #     res = Signal(self.data_width)
+        #     with m.If((idx == 0x1f) & ~resp[0]):
+        #         csr.dbg_result_consumed.count(m)
+        #         m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
+        #     with m.Else():
+        #         m.d.av_comb += res.eq(xvalue(m, self.data_width))
+        #     return dict(fifo_data=res)
 
         @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in range(self.valid_width - 2)])
         def _(idx):
             return {f'idx{i}': idx[i] for i in range(self.valid_width - 2)}
 
         read_regs = {
-                0x00: rd_ttl_hi(0),
-                0x01: rd_ttl_lo(0),
-                0x02: rd_shadow.timing_status,
-                0x03: rd_shadow.timing_ctrl,
-                0x04: ttl_out_reg(0),
-                0x05: rd_shadow.clockout_div,
-                0x06: MAJOR_VERSION,
-                0x07: MINOR_VERSION,
-                0x10: rd_ttl_hi(1),
-                0x11: rd_ttl_lo(1),
-                0x12: rd_ttl_hi(2),
-                0x13: rd_ttl_lo(2),
-                0x14: rd_ttl_hi(3),
-                0x15: rd_ttl_lo(3),
-                0x16: rd_ttl_hi(4),
-                0x17: rd_ttl_lo(4),
-                0x18: rd_ttl_hi(5),
-                0x19: rd_ttl_lo(5),
-                0x1a: rd_ttl_hi(6),
-                0x1b: rd_ttl_lo(6),
-                0x1c: rd_ttl_hi(7),
-                0x1d: rd_ttl_lo(7),
-                0x1e: rd_shadow.loopback,
-                0x20: rd_shadow.dbg_inst_word_count,
-                0x21: rd_shadow.dbg_inst_count,
-                0x22: rd_shadow.dbg_ttl_count,
-                0x23: rd_shadow.dbg_dds_count,
-                0x24: rd_shadow.dbg_wait_count,
-                0x25: rd_shadow.dbg_clear_count,
-                0x26: rd_shadow.dbg_loopback_count,
-                0x27: rd_shadow.dbg_clock_count,
-                0x28: rd_shadow.dbg_spi_count,
-                0x29: rd_shadow.dbg_underflow_cycle,
-                0x2a: rd_shadow.dbg_inst_cycle,
-                # 0x2b: rd_shadow.dbg_ttl_cycle,
-                # 0x2c: rd_shadow.dbg_wait_cycle,
-                # 0x2d: rd_shadow.dbg_result_overflow_count,
-                0x2e: rd_shadow.dbg_result_count,
-                0x2f: rd_shadow.dbg_result_generated,
-                0x30: rd_shadow.dbg_result_consumed,
+0: C(0, 32),
+1: C(0, 32),
+2: C(0, 32),
+3: C(0, 32),
+4: C(0, 32),
+5: C(0, 32),
+6: C(0, 32),
+7: C(0, 32),
+8: C(0, 32),
+9: C(0, 32),
+10: C(0, 32),
+11: C(0, 32),
+12: C(0, 32),
+13: C(0, 32),
+14: C(0, 32),
+15: C(0, 32),
+16: C(0, 32),
+17: C(0, 32),
+18: C(0, 32),
+19: C(0, 32),
+20: C(0, 32),
+21: C(0, 32),
+22: C(0, 32),
+23: C(0, 32),
+24: C(0, 32),
+25: C(0, 32),
+26: C(0, 32),
+27: C(0, 32),
+28: C(0, 32),
+29: C(0, 32),
+30: C(0, 32),
+31: C(0, 32),
+32: C(0, 32),
+33: C(0, 32),
+34: C(0, 32),
+35: C(0, 32),
+36: C(0, 32),
+37: C(0, 32),
+38: C(0, 32),
+39: C(0, 32),
+40: C(0, 32),
+41: C(0, 32),
+42: C(0, 32),
+43: C(0, 32),
+44: C(0, 32),
+45: C(0, 32),
+46: C(0, 32),
+47: C(0, 32),
+48: C(0, 32),
+49: C(0, 32),
+50: C(0, 32),
+51: C(0, 32),
+52: C(0, 32),
+53: C(0, 32),
+54: C(0, 32),
+55: C(0, 32),
+56: C(0, 32),
+57: C(0, 32),
+58: C(0, 32),
+59: C(0, 32),
+60: C(0, 32),
+61: C(0, 32),
+62: C(0, 32),
+63: C(0, 32),
+                # 0x00: C(0, 32), # rd_ttl_hi(0),
+                # 0x01: C(0, 32), # rd_ttl_lo(0),
+                # 0x02: C(0, 32), # rd_shadow.timing_status,
+                # 0x03: C(0, 32), # rd_shadow.timing_ctrl,
+                # 0x04: C(0, 32), # ttl_out_reg(0),
+                # 0x05: C(0, 32), # rd_shadow.clockout_div,
+                # 0x06: C(0, 32), # MAJOR_VERSION,
+                # 0x07: C(0, 32), # MINOR_VERSION,
+                # 0x10: C(0, 32), # rd_ttl_hi(1),
+                # 0x11: C(0, 32), # rd_ttl_lo(1),
+                # 0x12: C(0, 32), # rd_ttl_hi(2),
+                # 0x13: C(0, 32), # rd_ttl_lo(2),
+                # 0x14: C(0, 32), # rd_ttl_hi(3),
+                # 0x15: C(0, 32), # rd_ttl_lo(3),
+                # 0x16: C(0, 32), # rd_ttl_hi(4),
+                # 0x17: C(0, 32), # rd_ttl_lo(4),
+                # 0x18: C(0, 32), # rd_ttl_hi(5),
+                # 0x19: C(0, 32), # rd_ttl_lo(5),
+                # 0x1a: C(0, 32), # rd_ttl_hi(6),
+                # 0x1b: C(0, 32), # rd_ttl_lo(6),
+                # 0x1c: C(0, 32), # rd_ttl_hi(7),
+                # 0x1d: C(0, 32), # rd_ttl_lo(7),
+                # 0x1e: C(0, 32), # rd_shadow.loopback,
+                # 0x20: C(0, 32), # rd_shadow.dbg_inst_word_count,
+                # 0x21: C(0, 32), # rd_shadow.dbg_inst_count,
+                # 0x22: C(0, 32), # rd_shadow.dbg_ttl_count,
+                # 0x23: C(0, 32), # rd_shadow.dbg_dds_count,
+                # 0x24: C(0, 32), # rd_shadow.dbg_wait_count,
+                # 0x25: C(0, 32), # rd_shadow.dbg_clear_count,
+                # 0x26: C(0, 32), # rd_shadow.dbg_loopback_count,
+                # 0x27: C(0, 32), # rd_shadow.dbg_clock_count,
+                # 0x28: C(0, 32), # rd_shadow.dbg_spi_count,
+                # 0x29: C(0, 32), # rd_shadow.dbg_underflow_cycle,
+                # 0x2a: C(0, 32), # rd_shadow.dbg_inst_cycle,
+                # # 0x2b: C(0, 32), # rd_shadow.dbg_ttl_cycle,
+                # # 0x2c: C(0, 32), # rd_shadow.dbg_wait_cycle,
+                # # 0x2d: C(0, 32), # rd_shadow.dbg_result_overflow_count,
+                # 0x2e: C(0, 32), # rd_shadow.dbg_result_count,
+                # 0x2f: C(0, 32), # rd_shadow.dbg_result_generated,
+                # 0x30: C(0, 32), # rd_shadow.dbg_result_consumed,
 
-                0x40: ttl_out_reg(1),
-                0x41: ttl_out_reg(2),
-                0x42: ttl_out_reg(3),
-                0x43: ttl_out_reg(4),
-                0x44: ttl_out_reg(5),
-                0x45: ttl_out_reg(6),
-                0x46: ttl_out_reg(7),
+                # 0x40: C(0, 32), # ttl_out_reg(1),
+                # 0x41: C(0, 32), # ttl_out_reg(2),
+                # 0x42: C(0, 32), # ttl_out_reg(3),
+                # 0x43: C(0, 32), # ttl_out_reg(4),
+                # 0x44: C(0, 32), # ttl_out_reg(5),
+                # 0x45: C(0, 32), # ttl_out_reg(6),
+                # 0x46: C(0, 32), # ttl_out_reg(7),
 
-                0x48: rd_dma_ttl(0),
-                0x49: rd_dma_ttl(1),
-                0x4a: rd_dma_ttl(2),
-                0x4b: rd_dma_ttl(3),
-                0x4c: rd_dma_ttl(4),
-                0x4d: rd_dma_ttl(5),
-                0x4e: rd_dma_ttl(6),
-                0x4f: rd_dma_ttl(7),
+                # # 0x48: C(0, 32), # rd_dma_ttl(0),
+                # # 0x49: C(0, 32), # rd_dma_ttl(1),
+                # # 0x4a: C(0, 32), # rd_dma_ttl(2),
+                # # 0x4b: C(0, 32), # rd_dma_ttl(3),
+                # # 0x4c: C(0, 32), # rd_dma_ttl(4),
+                # # 0x4d: C(0, 32), # rd_dma_ttl(5),
+                # # 0x4e: C(0, 32), # rd_dma_ttl(6),
+                # 0x4f: C(0, 32), # rd_dma_ttl(7),
 
-                0x50: rd_shadow.dds_timing1,
-                0x51: rd_shadow.dds_timing2,
-                0x52: rd_shadow.dds0_reg,
-                0x53: rd_shadow.dds1_reg,
+                # 0x50: C(0, 32), # rd_shadow.dds_timing1,
+                # 0x51: C(0, 32), # rd_shadow.dds_timing2,
+                # 0x52: C(0, 32), # rd_shadow.dds0_reg,
+                # 0x53: C(0, 32), # rd_shadow.dds1_reg,
 
-                0x58: rd_shadow.dma_status,
-                0x59: rd_shadow.dma_ctrl,
+                # # 0x58: C(0, 32), # rd_shadow.dma_status,
+                # # 0x59: C(0, 32), # rd_shadow.dma_ctrl,
         }
 
         stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
-        stage_state[0x1f] = lambda arg: arg.fifo_data
+        # stage_state[0x1f] = lambda arg: arg.fifo_data
 
         def get_stage(arg, i):
             if i in stage_state:
                 return stage_state[i](arg)
 
-        max_batch_sz = 8
+        max_batch_sz = 1024
         for bit in range(self.valid_width - 2):
             idx_out_width = self.valid_width - 2 - 1 - bit
             next_stage_state = {}
@@ -380,6 +444,8 @@ class ControlInterface(Elaboratable):
             if bit == 2:
                 read_pipe.fifo(depth=2)
 
+            print(f"bit: {bit}, idx_out_width: {idx_out_width}, nidx_outs: {nidx_outs}")
+
             for start_idx in range(0, nidx_outs, batch_sz):
                 end_idx = min(nidx_outs, start_idx + batch_sz)
                 idxs = idx_outs[start_idx:end_idx]
@@ -393,8 +459,8 @@ class ControlInterface(Elaboratable):
                     else:
                         layout_out.append((f'data_{bit}_{idx_out_val}', self.data_width))
                     if bit == 0:
-                        if idx_out_val == 0x1f >> 1:
-                            layout_in.append(('fifo_data', self.data_width))
+                        # if idx_out_val == 0x1f >> 1:
+                        #     layout_in.append(('fifo_data', self.data_width))
                         continue
                     if (idx_out_val * 2) in stage_state:
                         layout_in.append((f'data_{bit - 1}_{idx_out_val * 2}', self.data_width))
