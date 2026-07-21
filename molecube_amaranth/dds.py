@@ -229,9 +229,9 @@ class DDSController(Elaboratable):
         write_result = Signal(1)
         assign_xvalue(m, final_result)
 
-        with m.If(hold_cnt != 0):
+        with m.If(~hold_end):
             m.d.sync += [hold_cnt.eq(hold_cnt - 1),
-                         hold_end.eq(hold_cnt == 1)]
+                         hold_end.eq(hold_cnt[1:] == 0)]
             with m.Switch(fsm_state):
                 with m.Case(FSMState.IDLE):
                     assign_xvalue(m, hold_cnt)

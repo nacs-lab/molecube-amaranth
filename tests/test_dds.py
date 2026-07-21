@@ -168,6 +168,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            await sim.tick()
             for _ in range(100):
                 id = random.randint(0, 10)
                 freq = random.randint(0, 0xffff_ffff)
@@ -190,6 +191,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            await sim.tick()
             for _ in range(100):
                 id = random.randint(0, 10)
                 amp = random.randint(0, 0xfff)
@@ -213,6 +215,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            await sim.tick()
             targets = set()
             for _ in range(100):
                 id = random.randint(0, 10)
@@ -238,6 +241,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adhd, adhd)
             sim.set(circ.csr.dds_write_fuddl, fuddl)
             sim.set(circ.csr.dds_write_fudhd, fudhd)
+            await sim.tick()
             targets = set()
             for _ in range(100):
                 id = random.randint(0, 10)
@@ -261,6 +265,7 @@ class TestDDS(TestCaseWithSimulator):
 
         async def f(sim):
             sim.set(circ.csr.dds_reset_rshd, rshd)
+            await sim.tick()
             for _ in range(100):
                 id = random.randint(0, 10)
 
@@ -281,6 +286,7 @@ class TestDDS(TestCaseWithSimulator):
         async def f(sim):
             sim.set(circ.csr.dds_read_asu, asu)
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
+            await sim.tick()
             targets = set()
             for _ in range(10):
                 id = random.randint(0, 10)
@@ -318,6 +324,7 @@ class TestDDS(TestCaseWithSimulator):
             sim.set(circ.csr.dds_read_asu, asu)
             sim.set(circ.csr.dds_read_rdl, rdl)
             sim.set(circ.csr.dds_read_rdhoz, rdhoz)
+            await sim.tick()
             targets = set()
             for _ in range(10):
                 id = random.randint(0, 10)
