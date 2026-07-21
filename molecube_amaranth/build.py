@@ -3,11 +3,22 @@
 from molecube_amaranth.toplevel import TopLevel
 from amaranth_zynq.platform import ZC702Platform
 from transactron import TransactronContextElaboratable
+from transactron.utils.gen_hacks import fixup_vivado_transparent_memories
+
+class BuildPlatform(ZC702Platform):
+    def __init__(self, *args, **kws):
+        super().__init__(*args, **kws)
+        self._molecube_vivado_fixedup = False
+
+    def toolchain_prepare(self, design, *args, **kws):
+        self._molecube_vivado_fixedup = True
+        fixup_vivado_transparent_memories(design)
+        return super().toolchain_prepare(design, *args, **kws)
 
 def build_zc702(config, do_build=True, build_dir="build"):
     top = TopLevel(config)
     core = TransactronContextElaboratable(top)
-    plat = ZC702Platform()
+    plat = BuildPlatform()
     plan = plat.build(core, do_build=do_build, build_dir=build_dir,
                       synth_design_opts="-directive PerformanceOptimized",
                       script_after_synth="""
@@ -35,5 +46,6 @@ phys_opt_design -directive AggressiveExplore
 phys_opt_design -directive AggressiveFanoutOpt
 phys_opt_design -directive AlternateReplication
 """)
+    assert plat._molecube_vivado_fixedup
     if not do_build:
         plan.extract(build_dir)
