@@ -6,7 +6,6 @@ from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 
 from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
-from transactron.lib import BasicFifo
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .utils import assign_xvalue, xvalue
