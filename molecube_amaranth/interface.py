@@ -160,11 +160,15 @@ class ControlInterface(Elaboratable):
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
-        for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
-                         'dds0_reg', 'dds1_reg', 'dma_status']:
+        for reg_name in ['ttl_out', 'ttl_in', 'timing_status', 'clockout_div',
+                         'dbg_result_count', 'dds0_reg', 'dds1_reg', 'dma_status']:
             real_reg = Signal.cast(getattr(csr, reg_name))
-            if reg_name in ('ttl_out', 'clockout_div', 'dbg_result_count',
-                            'dds0_reg', 'dds1_reg'):
+            if reg_name == 'ttl_out':
+                real_reg = real_reg[:self.ioctrl.nttlout]
+            elif reg_name == 'ttl_in':
+                real_reg = real_reg[:self.ioctrl.nttlin]
+            if reg_name in ('ttl_out', 'ttl_in', 'clockout_div',
+                            'dbg_result_count', 'dds0_reg', 'dds1_reg'):
                 rd_reg = relaxed_read_shadow(m, real_reg)
             else:
                 rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
@@ -185,6 +189,9 @@ class ControlInterface(Elaboratable):
 
         def ttl_out_reg(idx):
             return rd_shadow.ttl_out[idx * 32:(idx + 1) * 32]
+
+        def ttl_in_reg(idx):
+            return rd_shadow.ttl_in[idx * 32:(idx + 1) * 32]
 
         def rd_dma_ttl(idx):
             return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
@@ -442,6 +449,15 @@ class ControlInterface(Elaboratable):
 
         read_states.add_leaf(0x58, rd_shadow.dma_status)
         read_states.add_leaf(0x59, rd_shadow.dma_ctrl)
+
+        read_states.add_leaf(0x60, ttl_in_reg(0))
+        read_states.add_leaf(0x61, ttl_in_reg(1))
+        read_states.add_leaf(0x62, ttl_in_reg(2))
+        read_states.add_leaf(0x63, ttl_in_reg(3))
+        read_states.add_leaf(0x64, ttl_in_reg(4))
+        read_states.add_leaf(0x65, ttl_in_reg(5))
+        read_states.add_leaf(0x66, ttl_in_reg(6))
+        read_states.add_leaf(0x67, ttl_in_reg(7))
 
         read_states.compute_exprs()
 

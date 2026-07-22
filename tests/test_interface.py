@@ -32,10 +32,7 @@ def update_data(old_data, data, strb):
     return data
 
 def reg_mask(idx, reg):
-    if idx in (0x10, 0x11, 0x49):
-        # ttl hi/lo mask, dma ttl mask bank 1
-        return (1 << 24) - 1
-    elif idx == 0x50:
+    if idx == 0x50:
         # dds timing 1
         return 0x071c71c7
     elif idx == 0x51:
@@ -150,16 +147,16 @@ class InterfaceWrapper(Elaboratable):
         }
 
     def ttl_out_reg(self, idx):
-        return self.csr.ttl_out[idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_out[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
 
     def ttl_hi_reg(self, idx):
-        return self.csr.ttl_hi_mask[idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_hi_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
 
     def ttl_lo_reg(self, idx):
-        return self.csr.ttl_lo_mask[idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_lo_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
 
     def dma_ttl_reg(self, idx):
-        return self.csr.dma_ttl_mask[idx * 32:(idx + 1) * 32]
+        return self.csr.dma_ttl_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
 
     def randomize_read_only_regs(self, sim):
         vals = {}
