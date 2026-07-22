@@ -391,28 +391,26 @@ class TestInterface(TestCaseWithSimulator):
 
         async def f(sim):
             ttl_val = 0
-            for _ in range(20):
-                for bank, idx in enumerate(idxs):
-                    byte = random.randint(0, 3)
-                    hi = random.randint(0, 0xff)
-                    lo = random.randint(0, 0xff)
-                    lo = lo & ~hi
+            for _ in range(50):
+                byte = random.randint(0, 31)
+                hi = random.randint(0, 0xff)
+                lo = random.randint(0, 0xff)
+                lo = lo & ~hi
 
-                    cmd = hi | (lo << 8) | (byte << 16)
+                cmd = hi | (lo << 8) | (byte << 16)
+                assert (await iface.write_request.call_try(sim, addr=0x4 * 4,
+                                                           strb=0xf,
+                                                           data=cmd)) is not None
+                for _ in range(3):
+                    await sim.tick()
+                assert (await iface.write_reply.call_try(sim)) is not None
 
-                    assert (await iface.write_request.call_try(sim, addr=idx * 4,
-                                                               strb=0xf,
-                                                               data=cmd)) is not None
-                    for _ in range(3):
-                        await sim.tick()
-                    assert (await iface.write_reply.call_try(sim)) is not None
+                shift = byte * 8
+                ttl_val = ((ttl_val | (hi << shift)) & ~(lo << shift)) & 0xff_ffff_ffff_ffff
+                for _ in range(8):
+                    await sim.tick()
 
-                    shift = (byte + 4 * bank) * 8
-                    ttl_val = ((ttl_val | (hi << shift)) & ~(lo << shift)) & 0xff_ffff_ffff_ffff
-                    for _ in range(8):
-                        await sim.tick()
-
-                    assert sim.get(iface.csr.ttl_out) == ttl_val
+                assert sim.get(iface.csr.ttl_out) == ttl_val
 
             for bank, idx in enumerate(idxs):
                 assert (await iface.read_request.call_try(sim, addr=idx * 4)) is not None

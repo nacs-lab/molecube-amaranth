@@ -238,8 +238,8 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x03):
                     axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
                 with m.Case(0x04):
-                    self.ioctrl.ttlout.set_bank_user0(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
+                    self.ioctrl.ttlout.set_byte_user(m, hi=data[:8], lo=data[8:16],
+                                                     byte=data[16:21])
                 with m.Case(0x05):
                     self.ioctrl.clockout.set(m, Cat(~C(0, self.ioctrl.clock_shift),
                                                     data[:8]))
@@ -278,27 +278,6 @@ class ControlInterface(Elaboratable):
         @write_pipe.stage(m)
         def _(idx, data, strb):
             with m.Switch(idx):
-                with m.Case(0x40):
-                    self.ioctrl.ttlout.set_bank_user1(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x41):
-                    self.ioctrl.ttlout.set_bank_user2(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x42):
-                    self.ioctrl.ttlout.set_bank_user3(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x43):
-                    self.ioctrl.ttlout.set_bank_user4(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x44):
-                    self.ioctrl.ttlout.set_bank_user5(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x45):
-                    self.ioctrl.ttlout.set_bank_user6(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
-                with m.Case(0x46):
-                    self.ioctrl.ttlout.set_bank_user7(m, hi=data[:8], lo=data[8:16],
-                                                      byte=data[16:18])
                 with m.Case(0x48):
                     axi_write_reg(m, wr_dma_ttl(0), data, strb)
                 with m.Case(0x49):

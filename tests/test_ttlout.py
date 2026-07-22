@@ -24,9 +24,7 @@ class TTLOutControllerTester(Elaboratable):
         self.csr = Registers(config)
         self.ttlout = TTLOutController(self.pulseio.ttlout, self.csr, delay=delay)
 
-        self._set_byte_user = Method(i=[('byte', 5), ('value', 8)])
-
-        self.set_byte_user = _TestbenchIO(AdapterTrans.create(self._set_byte_user))
+        self.set_byte_user = _TestbenchIO(AdapterTrans.create(self.ttlout.set_byte_user))
         self.set_bank_inst = _TestbenchIO(AdapterTrans.create(self.ttlout.set_bank_inst))
         self.set_mask = _TestbenchIO(AdapterTrans.create(self.ttlout.set_mask))
 
@@ -36,14 +34,6 @@ class TTLOutControllerTester(Elaboratable):
         m.submodules.pulseio = self.pulseio
         m.submodules.csr = self.csr
         m.submodules.ttlout = self.ttlout
-
-        @def_method(m, self._set_byte_user)
-        def _(byte, value):
-            with m.Switch(byte[2:]):
-                for i in range(8):
-                    with m.Case(i):
-                        getattr(self.ttlout, f'set_bank_user{i}')(m, byte=byte[:2],
-                                                                  hi=value, lo=~value)
 
         m.submodules.set_bank_inst = self.set_bank_inst
         m.submodules.set_byte_user = self.set_byte_user
@@ -131,10 +121,13 @@ class TestTTLOut(TestCaseWithSimulator):
         checker = TTLChecker(delay)
 
         async def f(sim):
+            values = [0 for _ in range(8)]
             for _ in range(1000):
                 byte = random.randint(0, 7)
-                value = random.randint(0, 0xff)
-                await circ.set_byte_user.call(sim, byte=byte, value=value)
+                hi = random.randint(0, 0xff)
+                lo = random.randint(0, 0xff) & ~hi
+                values[byte] = value = (values[byte] | hi) & ~lo
+                await circ.set_byte_user.call(sim, byte=byte, hi=hi, lo=lo)
                 checker.set_byte(byte, value)
                 for _ in range(6):
                     checker.tick()
