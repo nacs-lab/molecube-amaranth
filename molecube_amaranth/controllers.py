@@ -6,6 +6,7 @@ from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 from .clockout import ClockOutController
 from .spi import SPIController
 from .dds import DDSController
+from .trigger import TriggerController
 from .ttlout import TTLOutController
 
 class IOController(Elaboratable):
@@ -19,6 +20,7 @@ class IOController(Elaboratable):
         self.nttlout = len(pulseio.ttlout.o)
         self.ttlout = TTLOutController(pulseio.ttlout, csr,
                                        delay=1 if clock_shift == 0 else 0)
+        self.trigger = TriggerController(pulseio.ttlin, 35)
 
     def elaborate(self, plat):
         m = Module()
@@ -27,4 +29,5 @@ class IOController(Elaboratable):
         m.submodules.dds0 = self.dds0
         m.submodules.dds1 = self.dds1
         m.submodules.ttlout = self.ttlout
+        m.submodules.trigger = self.trigger
         return m

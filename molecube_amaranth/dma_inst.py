@@ -444,8 +444,6 @@ class DMAInstRunner(Elaboratable):
                                                       ('action', self.OutputAction)])
         self.write.provide(inst_conn.write)
 
-        m.submodules.trig_ctrl = trig_ctrl = TriggerController(self.pulseio.ttlin, 35)
-
         class State(enum.Enum):
             FETCH = 0
             WAIT = 1
@@ -491,8 +489,9 @@ class DMAInstRunner(Elaboratable):
                         self.dmactrl.inst_started(m)
                     with m.If(req.is_trig):
                         wait_trig = req.wait.wait_trig
-                        trig_ctrl.setup(m, chn=wait_trig.chn, edge=wait_trig.edge,
-                                        cycle=wait_trig.cycle)
+                        self.ioctrl.trigger.setup(m, chn=wait_trig.chn,
+                                                  edge=wait_trig.edge,
+                                                  cycle=wait_trig.cycle)
                         m.d.sync += state.eq(State.TRIG)
                     with m.Elif(~wait.is0):
                         m.d.sync += [counter.eq(wait.cycle - 1),
@@ -517,7 +516,7 @@ class DMAInstRunner(Elaboratable):
                 assign_xvalue(m, output_action)
                 assign_xvalue(m, counter)
                 with Transaction().body(m):
-                    with m.If(trig_ctrl.wait(m).timeout):
+                    with m.If(self.ioctrl.trigger.wait(m).timeout):
                         self.dmactrl.trig_timeout(m)
                     m.d.sync += state.eq(State.FETCH)
 
