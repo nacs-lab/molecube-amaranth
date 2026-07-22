@@ -362,48 +362,48 @@ class TestDMAController(TestCaseWithSimulator):
                 await sim.tick()
 
         async def f(sim):
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
             await circ.inst_started.call(sim)
             await wait(sim)
             # Running
-            assert sim.get(circ.csr.dma_status) == 9 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
             await circ.inst_stopped.call(sim)
             await wait(sim)
             # Stopped
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
             await circ.inst_started.call(sim)
             await wait(sim)
             # Running & underflown
-            assert sim.get(circ.csr.dma_status) == 11 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 11 << 8
             await circ.inst_stopped.call(sim)
             await wait(sim)
             # Underflown
-            assert sim.get(circ.csr.dma_status) == 10 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 10 << 8
 
             await circ.inst_started.call(sim)
             await wait(sim)
             # Running & underflown
-            assert sim.get(circ.csr.dma_status) == 11 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 11 << 8
             await circ.inst_stopped.call(sim)
             await wait(sim)
             # Underflown
-            assert sim.get(circ.csr.dma_status) == 10 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 10 << 8
 
             await circ.queue_cmd.call(sim, first=1)
             await wait(sim)
             # Cleared
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
             await circ.inst_started.call(sim)
             await wait(sim)
             # Running
-            assert sim.get(circ.csr.dma_status) == 9 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
             await circ.inst_stopped.call(sim)
             await wait(sim)
             # Stopped
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -417,16 +417,16 @@ class TestDMAController(TestCaseWithSimulator):
                 await sim.tick()
 
         async def f(sim):
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
             await circ.trig_timeout.call(sim)
             await wait(sim)
-            assert sim.get(circ.csr.dma_status) == 12 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 12 << 8
 
             await circ.queue_cmd.call(sim, first=1)
             await wait(sim)
             # Cleared
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
@@ -490,7 +490,7 @@ class TestDMAController(TestCaseWithSimulator):
                 assert await circ.read_inst.call_try(sim) is None
                 await sim.tick()
 
-            assert sim.get(circ.csr.dma_status) == (8 << 8) | 2
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == (8 << 8) | 2
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)

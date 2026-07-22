@@ -49,6 +49,14 @@ class Counter(wiring.Component):
 
         return m
 
+class DMAStatus(Struct):
+    transfer_count: 8
+    running: 1
+    underflow: 1
+    trig_timeout: 1
+    cmd_empty: 1
+    cmd_full: 1
+
 class DMACtrl(Struct):
     enabled: 1
 
@@ -67,7 +75,7 @@ class Registers(Elaboratable):
         self.loopback = Signal(self.REG_WIDTH)
         self.dds0_reg = Signal(self.REG_WIDTH)
         self.dds1_reg = Signal(self.REG_WIDTH)
-        self.dma_status = Signal(self.REG_WIDTH, init=8 << 8)
+        self.dma_status = Signal(DMAStatus, init={'cmd_empty': 1})
         self.dma_ctrl = Signal(DMACtrl)
 
         # Semistatic

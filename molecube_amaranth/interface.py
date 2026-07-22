@@ -162,7 +162,7 @@ class ControlInterface(Elaboratable):
 
         for reg_name in ['ttl_out', 'timing_status', 'clockout_div', 'dbg_result_count',
                          'dds0_reg', 'dds1_reg', 'dma_status']:
-            real_reg = getattr(csr, reg_name)
+            real_reg = Signal.cast(getattr(csr, reg_name))
             if reg_name in ('ttl_out', 'clockout_div', 'dbg_result_count',
                             'dds0_reg', 'dds1_reg'):
                 rd_reg = relaxed_read_shadow(m, real_reg)

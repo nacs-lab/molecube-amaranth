@@ -142,16 +142,6 @@ class AXIReadStream(Elaboratable):
         return m
 
 
-class DMAStatus(Struct):
-    transfer_count: 8
-    running: 1
-    underflow: 1
-    trig_timeout: 1
-    cmd_empty: 1
-    cmd_full: 1
-    _padding: 19
-
-
 class DMAController(Elaboratable):
     def __init__(self, axi, csr, fifos):
         self.axi = axi
@@ -178,7 +168,7 @@ class DMAController(Elaboratable):
                      cmd_full.eq(fifos.spi_cmd_fifo.full | fifos.dds0_cmd_fifo.full |
                                  fifos.dds1_cmd_fifo.full)]
 
-        dma_status = DMAStatus(self.csr.dma_status)
+        dma_status = self.csr.dma_status
         reg_chain(m, input=running, output=dma_status.running, levels=2)
         reg_chain(m, input=underflow, output=dma_status.underflow, levels=2)
         reg_chain(m, input=transfer_count, output=dma_status.transfer_count, levels=2)

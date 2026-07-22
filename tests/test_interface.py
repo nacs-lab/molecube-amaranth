@@ -110,7 +110,7 @@ class InterfaceWrapper(Elaboratable):
             # 0x44: self.ttl_out_reg(5),
             # 0x45: self.ttl_out_reg(6),
             # 0x46: self.ttl_out_reg(7),
-            0x58: self.csr.dma_status,
+            0x58: Signal.cast(self.csr.dma_status),
         }
 
         self.read_write_regs = {

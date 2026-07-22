@@ -580,14 +580,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -631,14 +631,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -671,14 +671,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -714,23 +714,23 @@ class TestRunner(TestCaseWithSimulator):
 
         async def status_checker(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
             for i in range(nt1):
                 cmd = state.queue[i]
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
             await sim.tick()
             for i in range(nt2):
                 cmd = state.queue[i + nt1]
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 11 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 11 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 10 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 10 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -756,13 +756,13 @@ class TestRunner(TestCaseWithSimulator):
 
         async def status_checker(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for t in times:
                 for _ in range(t + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
         async def longwait_checker(sim):
             for _ in range(RUNNER_LATENCY):
@@ -815,13 +815,13 @@ class TestRunner(TestCaseWithSimulator):
 
         async def status_checker(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for t in times:
                 for _ in range(t + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
-            assert sim.get(circ.csr.dma_status) == 8 << 8
+            assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
         async def longwait_checker(sim):
             for _ in range(RUNNER_LATENCY):
@@ -878,14 +878,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -918,14 +918,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -964,14 +964,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for cmd in state.checker_queue:
                 for _ in range(cmd['wait']['cycle'] + 1):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -1008,19 +1008,19 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             isfirst = True
             for cmd in state.checker_queue:
                 status = 9 << 8 if isfirst else 13 << 8
                 isfirst = False
                 for _ in range(cmd['wait_trig']['cycle'] + 2):
-                    assert sim.get(circ.csr.dma_status) == status
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == status
                     await sim.tick()
-                assert sim.get(circ.csr.dma_status) == 13 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 13 << 8
                 await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 12 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 12 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
@@ -1069,14 +1069,14 @@ class TestRunner(TestCaseWithSimulator):
 
         async def runstate_check(sim):
             for _ in range(RUNNER_LATENCY + 2):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
             for trig_time in trigger_times:
                 for _ in range(trig_time + 6):
-                    assert sim.get(circ.csr.dma_status) == 9 << 8
+                    assert sim.get(Signal.cast(circ.csr.dma_status)) == 9 << 8
                     await sim.tick()
             for _ in range(50):
-                assert sim.get(circ.csr.dma_status) == 8 << 8
+                assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
                 await sim.tick()
 
         with self.run_simulation(circ) as sim:
