@@ -5,12 +5,12 @@ from amaranth_axi.axitools import axi_write_reg, AXISlaveReadIFace, AXISlaveWrit
 
 from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
-from transactron.lib import BasicFifo
 
 from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
 from .csr import Registers
+from .fifo import BufferedFifo
 from .utils import xvalue, reg_chain
 
 def relaxed_read_shadow(m, reg):
@@ -199,7 +199,7 @@ class ControlInterface(Elaboratable):
         dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         # Buffer for command fifo to simplify write combinational logic
-        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BasicFifo([('data', self.data_width)], 2)
+        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BufferedFifo([('data', self.data_width)], 3)
         with Transaction().body(m):
             cmd = cmd_pre_fifo.read(m)
             with m.If(dma_enabled):
@@ -485,15 +485,16 @@ class ControlInterface(Elaboratable):
                     res[value.value] = Mux(idx_bit, v1, v0)
                 return res
 
-        read_pipe.fifo(depth=2)
+        m.submodules.read_rep_fifo = read_rep_fifo = BufferedFifo(
+            [('data', self.data_width), ('resp', 2), ('id', self.id_width),
+             ('last', 1)], 3)
 
-        @read_pipe.stage(m)
-        def _():
-            pass
+        read_pipe.call_method(read_rep_fifo.write)
 
-        @read_pipe.stage(m)
-        def _(data, resp, id, last):
-            read_iface.done(m, data=data, resp=resp, id=id, last=last)
+        with Transaction().body(m):
+            rep = read_rep_fifo.read(m)
+            read_iface.done(m, data=rep.data, resp=rep.resp,
+                            id=rep.id, last=rep.last)
 
         with Transaction().body(m):
             req = read_iface.get(m)
