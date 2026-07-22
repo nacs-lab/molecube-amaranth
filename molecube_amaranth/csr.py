@@ -69,6 +69,9 @@ class Registers(Elaboratable):
         self.ttl_lo_mask = Signal(self.TTL_WIDTH)
         self.ttl_out = Signal(self.TTL_WIDTH)
         self.dma_ttl_mask = Signal(self.TTL_WIDTH)
+
+        self.ttl_in = Signal(self.TTL_WIDTH)
+
         self.timing_status = Signal(self.REG_WIDTH)
         self.timing_ctrl = Signal(self.REG_WIDTH)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)

@@ -11,6 +11,8 @@ from .ttlout import TTLOutController
 
 class IOController(Elaboratable):
     def __init__(self, pulseio, csr, fifos, *, clock_shift):
+        self.csr = csr
+        self.pulseio = pulseio
         self.clock_shift = clock_shift
         self.clockout = ClockOutController(pulseio.clockout, csr,
                                            div_width=8 + clock_shift)
@@ -20,6 +22,7 @@ class IOController(Elaboratable):
         self.nttlout = len(pulseio.ttlout.o)
         self.ttlout = TTLOutController(pulseio.ttlout, csr,
                                        delay=1 if clock_shift == 0 else 0)
+        self.nttlin = len(pulseio.ttlin.i)
         self.trigger = TriggerController(pulseio.ttlin, 35)
 
     def elaborate(self, plat):
@@ -30,4 +33,7 @@ class IOController(Elaboratable):
         m.submodules.dds1 = self.dds1
         m.submodules.ttlout = self.ttlout
         m.submodules.trigger = self.trigger
+
+        m.d.sync += self.csr.ttl_in[:self.nttlin].eq(self.pulseio.ttlin.i)
+
         return m
