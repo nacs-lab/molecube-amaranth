@@ -4,6 +4,12 @@ def get_bits(data, nbits):
     for bit in range(nbits):
         yield (data >> (nbits - bit - 1)) & 1
 
+def check_fields(v, flds):
+    if not isinstance(flds, dict):
+        assert v == flds
+        return
+    for name, fldval in flds.items():
+        check_fields(getattr(v, name), fldval)
 
 class TTLChecker:
     def __init__(self, pulseio, csr):

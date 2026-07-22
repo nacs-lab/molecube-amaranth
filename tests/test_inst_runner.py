@@ -14,7 +14,7 @@ from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
 from molecube_amaranth.controllers import IOController
 
-from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker, InstBuilder
+from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker, InstBuilder, check_fields
 
 import pytest
 import random
@@ -1658,10 +1658,6 @@ class InstDispatcherTester(Elaboratable):
         return InstBuilder.loopback(data=random.randint(0, 0xffff_ffff),
                                     timecheck=random.randint(0, 1))
 
-def _check_fields(v, flds):
-    for name, fldval in flds.items():
-        assert getattr(v, name) == fldval
-
 class TestInstDispatcher(TestCaseWithSimulator):
     def test_rand(self):
         circ = InstDispatcherTester()
@@ -1688,15 +1684,15 @@ class TestInstDispatcher(TestCaseWithSimulator):
 
         async def consume_dds0(sim):
             while circ.dds0_queue:
-                _check_fields(await circ.read_dds0.call(sim), circ.dds0_queue.pop(0))
+                check_fields(await circ.read_dds0.call(sim), circ.dds0_queue.pop(0))
 
         async def consume_dds1(sim):
             while circ.dds1_queue:
-                _check_fields(await circ.read_dds1.call(sim), circ.dds1_queue.pop(0))
+                check_fields(await circ.read_dds1.call(sim), circ.dds1_queue.pop(0))
 
         async def consume_spi(sim):
             while circ.spi_queue:
-                _check_fields(await circ.read_spi.call(sim), circ.spi_queue.pop(0))
+                check_fields(await circ.read_spi.call(sim), circ.spi_queue.pop(0))
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)

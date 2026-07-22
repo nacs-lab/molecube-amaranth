@@ -18,7 +18,7 @@ from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.io import PulseIO, sma_pin
 
-from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker
+from .utils import TTLChecker, ClockoutChecker, DDSChecker, SPIChecker, check_fields
 
 import pytest
 import random
@@ -87,10 +87,6 @@ def rand_inst(instf, **kw):
         args[name] = random.choice(kw.pop(name, range(1<<nbits)))
     assert not kw
     return instf(**args), args
-
-def _check_fields(v, flds):
-    for name, fldval in flds.items():
-        assert getattr(v, name) == fldval
 
 def _set_ttl(mask, value, bank, setval, bank_width):
     setmask = ((1 << bank_width) - 1) << (bank * bank_width)
@@ -307,11 +303,11 @@ class ParserState:
         if 'wait' in sw_action:
             assert 'wait_trig' not in sw_action
             assert not hw_action.is_trig
-            _check_fields(hw_action.wait.wait, sw_action['wait'])
+            check_fields(hw_action.wait.wait, sw_action['wait'])
         else:
             assert 'wait_trig' in sw_action
             assert hw_action.is_trig
-            _check_fields(hw_action.wait.wait_trig, sw_action['wait_trig'])
+            check_fields(hw_action.wait.wait_trig, sw_action['wait_trig'])
         sw_actions = sw_action['actions']
         hw_actions = hw_action.action
         for action_name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
@@ -319,7 +315,7 @@ class ParserState:
                 assert not getattr(hw_actions, f'{action_name}_en')
                 continue
             assert getattr(hw_actions, f'{action_name}_en')
-            _check_fields(getattr(hw_actions, action_name), sw_actions[action_name])
+            check_fields(getattr(hw_actions, action_name), sw_actions[action_name])
 
 
 class TestParser(TestCaseWithSimulator):
