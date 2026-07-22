@@ -19,6 +19,97 @@ def relaxed_read_shadow(m, reg):
     m.d.sync += r2.eq(reg)
     return r2
 
+class ReadData:
+    def __init__(self, addr, size, bit):
+        self.addr = addr
+        self.size = size
+        self.value = None
+        self.expr = None
+        self.bit = bit
+        self.batch = -1
+
+class ReadStates:
+    def __init__(self):
+        self.values = []
+
+    def add_leaf(self, addr, src, sz=None):
+        if isinstance(src, int):
+            if src == 0:
+                src = C(0, 0)
+            else:
+                src = C(src)
+        if sz is None:
+            assert not isinstance(src, str)
+            sz = len(src)
+        data = ReadData(addr, sz, -1)
+        data.value = src
+        self.values.append(data)
+
+    def compute_exprs_bit(self, bit, in_set):
+        out_set = dict()
+        bit_mask = 1 << bit
+        while in_set:
+            addr = next(iter(in_set))
+            value = in_set.pop(addr)
+            addr2 = addr ^ bit_mask
+            addr0 = addr & ~bit_mask
+            if addr2 not in in_set:
+                out_set[addr0] = value
+                continue
+            if addr == addr0:
+                value0 = value
+                value1 = in_set.pop(addr2)
+            else:
+                value1 = value
+                value0 = in_set.pop(addr2)
+            if value0.size == 0 and value1.size == 0:
+                assert value0.expr is None
+                assert value1.expr is None
+                out_set[addr0] = value0
+                continue
+            data = ReadData(addr0, max(value0.size, value1.size), bit)
+            data.value = f'data_{bit}_{addr0:x}'
+            data.expr = (value0, value1)
+            out_set[addr0] = data
+            self.values.append(data)
+        return out_set
+
+    def compute_exprs(self):
+        work_set = {data.addr: data for data in self.values}
+        bit = 0
+        while len(work_set) > 1:
+            work_set = self.compute_exprs_bit(bit, work_set)
+            bit += 1
+        _, data = work_set.popitem()
+        assert data.expr is not None
+        data.value = 'data'
+
+    def schedule_values(self, batch_size):
+        batches = []
+        cur_batch = []
+        batch_id = 0
+        for value in self.values:
+            if value.expr is None:
+                continue
+            lhs, rhs = value.expr
+            assert lhs.batch <= batch_id
+            assert rhs.batch <= batch_id
+            if lhs.batch == -1:
+                assert lhs.expr is None
+            if rhs.batch == -1:
+                assert rhs.expr is None
+            if (len(cur_batch) >= batch_size or
+                lhs.batch == batch_id or rhs.batch == batch_id):
+                assert len(cur_batch) > 0
+                batches.append(cur_batch)
+                cur_batch = []
+                batch_id += 1
+            cur_batch.append(value)
+            value.batch = batch_id
+        assert len(cur_batch) > 0
+        batches.append(cur_batch)
+        return batches
+
 class ControlInterface(Elaboratable):
     def __init__(self, axi, csr_regs, fifos, ioctrl, prefix=0, valid_width=None):
         self.axi = axi
@@ -283,144 +374,116 @@ class ControlInterface(Elaboratable):
                 m.d.av_comb += res.eq(xvalue(m, self.data_width))
             return dict(fifo_data=res)
 
-        @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in range(self.valid_width - 2)])
+        read_states = ReadStates()
+
+        read_states.add_leaf(0x00, rd_ttl_hi(0))
+        read_states.add_leaf(0x01, rd_ttl_lo(0))
+        read_states.add_leaf(0x02, rd_shadow.timing_status)
+        read_states.add_leaf(0x03, rd_shadow.timing_ctrl)
+        read_states.add_leaf(0x04, ttl_out_reg(0))
+        read_states.add_leaf(0x05, rd_shadow.clockout_div)
+        read_states.add_leaf(0x06, MAJOR_VERSION)
+        read_states.add_leaf(0x07, MINOR_VERSION)
+        read_states.add_leaf(0x10, rd_ttl_hi(1))
+        read_states.add_leaf(0x11, rd_ttl_lo(1))
+        read_states.add_leaf(0x12, rd_ttl_hi(2))
+        read_states.add_leaf(0x13, rd_ttl_lo(2))
+        read_states.add_leaf(0x14, rd_ttl_hi(3))
+        read_states.add_leaf(0x15, rd_ttl_lo(3))
+        read_states.add_leaf(0x16, rd_ttl_hi(4))
+        read_states.add_leaf(0x17, rd_ttl_lo(4))
+        read_states.add_leaf(0x18, rd_ttl_hi(5))
+        read_states.add_leaf(0x19, rd_ttl_lo(5))
+        read_states.add_leaf(0x1a, rd_ttl_hi(6))
+        read_states.add_leaf(0x1b, rd_ttl_lo(6))
+        read_states.add_leaf(0x1c, rd_ttl_hi(7))
+        read_states.add_leaf(0x1d, rd_ttl_lo(7))
+        read_states.add_leaf(0x1e, rd_shadow.loopback)
+        read_states.add_leaf(0x1f, 'fifo_data', 32)
+        read_states.add_leaf(0x20, rd_shadow.dbg_inst_word_count)
+        read_states.add_leaf(0x21, rd_shadow.dbg_inst_count)
+        read_states.add_leaf(0x22, rd_shadow.dbg_ttl_count)
+        read_states.add_leaf(0x23, rd_shadow.dbg_dds_count)
+        read_states.add_leaf(0x24, rd_shadow.dbg_wait_count)
+        read_states.add_leaf(0x25, rd_shadow.dbg_clear_count)
+        read_states.add_leaf(0x26, rd_shadow.dbg_loopback_count)
+        read_states.add_leaf(0x27, rd_shadow.dbg_clock_count)
+        read_states.add_leaf(0x28, rd_shadow.dbg_spi_count)
+        read_states.add_leaf(0x29, rd_shadow.dbg_underflow_cycle)
+        read_states.add_leaf(0x2a, rd_shadow.dbg_inst_cycle)
+        # read_states.add_leaf(0x2b, rd_shadow.dbg_ttl_cycle)
+        # read_states.add_leaf(0x2c, rd_shadow.dbg_wait_cycle)
+        # read_states.add_leaf(0x2d, rd_shadow.dbg_result_overflow_count)
+        read_states.add_leaf(0x2e, rd_shadow.dbg_result_count)
+        read_states.add_leaf(0x2f, rd_shadow.dbg_result_generated)
+        read_states.add_leaf(0x30, rd_shadow.dbg_result_consumed)
+
+        read_states.add_leaf(0x40, ttl_out_reg(1))
+        read_states.add_leaf(0x41, ttl_out_reg(2))
+        read_states.add_leaf(0x42, ttl_out_reg(3))
+        read_states.add_leaf(0x43, ttl_out_reg(4))
+        read_states.add_leaf(0x44, ttl_out_reg(5))
+        read_states.add_leaf(0x45, ttl_out_reg(6))
+        read_states.add_leaf(0x46, ttl_out_reg(7))
+
+        read_states.add_leaf(0x48, rd_dma_ttl(0))
+        read_states.add_leaf(0x49, rd_dma_ttl(1))
+        read_states.add_leaf(0x4a, rd_dma_ttl(2))
+        read_states.add_leaf(0x4b, rd_dma_ttl(3))
+        read_states.add_leaf(0x4c, rd_dma_ttl(4))
+        read_states.add_leaf(0x4d, rd_dma_ttl(5))
+        read_states.add_leaf(0x4e, rd_dma_ttl(6))
+        read_states.add_leaf(0x4f, rd_dma_ttl(7))
+
+        read_states.add_leaf(0x50, rd_shadow.dds_timing1)
+        read_states.add_leaf(0x51, rd_shadow.dds_timing2)
+        read_states.add_leaf(0x52, rd_shadow.dds0_reg)
+        read_states.add_leaf(0x53, rd_shadow.dds1_reg)
+
+        read_states.add_leaf(0x58, rd_shadow.dma_status)
+        read_states.add_leaf(0x59, rd_shadow.dma_ctrl)
+
+        read_states.compute_exprs()
+
+        all_idxs = set()
+        for value in read_states.values:
+            if value.expr is None:
+                continue
+            all_idxs.add(value.bit)
+        all_idxs = sorted(all_idxs)
+
+        @read_pipe.stage(m, o=[(f'idx{i}', 1) for i in all_idxs])
         def _(idx):
-            return {f'idx{i}': idx[i] for i in range(self.valid_width - 2)}
-
-        read_regs = {
-                0x00: rd_ttl_hi(0),
-                0x01: rd_ttl_lo(0),
-                0x02: rd_shadow.timing_status,
-                0x03: rd_shadow.timing_ctrl,
-                0x04: ttl_out_reg(0),
-                0x05: rd_shadow.clockout_div,
-                0x06: MAJOR_VERSION,
-                0x07: MINOR_VERSION,
-                0x10: rd_ttl_hi(1),
-                0x11: rd_ttl_lo(1),
-                0x12: rd_ttl_hi(2),
-                0x13: rd_ttl_lo(2),
-                0x14: rd_ttl_hi(3),
-                0x15: rd_ttl_lo(3),
-                0x16: rd_ttl_hi(4),
-                0x17: rd_ttl_lo(4),
-                0x18: rd_ttl_hi(5),
-                0x19: rd_ttl_lo(5),
-                0x1a: rd_ttl_hi(6),
-                0x1b: rd_ttl_lo(6),
-                0x1c: rd_ttl_hi(7),
-                0x1d: rd_ttl_lo(7),
-                0x1e: rd_shadow.loopback,
-                0x20: rd_shadow.dbg_inst_word_count,
-                0x21: rd_shadow.dbg_inst_count,
-                0x22: rd_shadow.dbg_ttl_count,
-                0x23: rd_shadow.dbg_dds_count,
-                0x24: rd_shadow.dbg_wait_count,
-                0x25: rd_shadow.dbg_clear_count,
-                0x26: rd_shadow.dbg_loopback_count,
-                0x27: rd_shadow.dbg_clock_count,
-                0x28: rd_shadow.dbg_spi_count,
-                0x29: rd_shadow.dbg_underflow_cycle,
-                0x2a: rd_shadow.dbg_inst_cycle,
-                # 0x2b: rd_shadow.dbg_ttl_cycle,
-                # 0x2c: rd_shadow.dbg_wait_cycle,
-                # 0x2d: rd_shadow.dbg_result_overflow_count,
-                0x2e: rd_shadow.dbg_result_count,
-                0x2f: rd_shadow.dbg_result_generated,
-                0x30: rd_shadow.dbg_result_consumed,
-
-                0x40: ttl_out_reg(1),
-                0x41: ttl_out_reg(2),
-                0x42: ttl_out_reg(3),
-                0x43: ttl_out_reg(4),
-                0x44: ttl_out_reg(5),
-                0x45: ttl_out_reg(6),
-                0x46: ttl_out_reg(7),
-
-                0x48: rd_dma_ttl(0),
-                0x49: rd_dma_ttl(1),
-                0x4a: rd_dma_ttl(2),
-                0x4b: rd_dma_ttl(3),
-                0x4c: rd_dma_ttl(4),
-                0x4d: rd_dma_ttl(5),
-                0x4e: rd_dma_ttl(6),
-                0x4f: rd_dma_ttl(7),
-
-                0x50: rd_shadow.dds_timing1,
-                0x51: rd_shadow.dds_timing2,
-                0x52: rd_shadow.dds0_reg,
-                0x53: rd_shadow.dds1_reg,
-
-                0x58: rd_shadow.dma_status,
-                0x59: rd_shadow.dma_ctrl,
-        }
-
-        stage_state = {k: lambda arg, v=v: v for k, v in read_regs.items()}
-        stage_state[0x1f] = lambda arg: arg.fifo_data
-
-        def get_stage(arg, i):
-            if i in stage_state:
-                return stage_state[i](arg)
+            return {f'idx{i}': idx[i] for i in all_idxs}
 
         max_batch_sz = 8
-        for bit in range(self.valid_width - 2):
-            idx_out_width = self.valid_width - 2 - 1 - bit
-            next_stage_state = {}
-            for idx_out_val in range(1 << idx_out_width):
-                if ((idx_out_val * 2) in stage_state or
-                    (idx_out_val * 2 + 1) in stage_state):
-                    fld = f'data_{bit}_{idx_out_val}'
-                    next_stage_state[idx_out_val] = lambda arg, fld=fld: getattr(arg, fld)
+        batches = read_states.schedule_values(max_batch_sz)
 
-            idx_outs = list(next_stage_state.keys())
-            nidx_outs = len(idx_outs)
-            nbatches = (nidx_outs + max_batch_sz - 1) // max_batch_sz
-            batch_sz = (nidx_outs + nbatches - 1) // nbatches
+        for (batch_id, batch) in enumerate(batches):
+            idxs = set()
+            layout_in = []
+            layout_out = []
+            for value in batch:
+                assert value.expr is not None
+                idxs.add(value.bit)
+                assert isinstance(value.value, str)
+                layout_out.append((value.value, value.size))
+                for vin in value.expr:
+                    if isinstance(vin.value, str):
+                        layout_in.append((vin.value, vin.size))
+            for idx in sorted(idxs):
+                layout_in.append((f'idx{idx}', 1))
 
-            if bit == 2:
-                read_pipe.fifo(depth=2)
-
-            for start_idx in range(0, nidx_outs, batch_sz):
-                end_idx = min(nidx_outs, start_idx + batch_sz)
-                idxs = idx_outs[start_idx:end_idx]
-
-                layout_in = [(f'idx{bit}', 1)]
-                layout_out = []
-
-                for idx_out_val in idxs:
-                    if idx_out_width == 0:
-                        layout_out.append(('data', self.data_width))
-                    else:
-                        layout_out.append((f'data_{bit}_{idx_out_val}', self.data_width))
-                    if bit == 0:
-                        if idx_out_val == 0x1f >> 1:
-                            layout_in.append(('fifo_data', self.data_width))
-                        continue
-                    if (idx_out_val * 2) in stage_state:
-                        layout_in.append((f'data_{bit - 1}_{idx_out_val * 2}', self.data_width))
-                    if (idx_out_val * 2 + 1) in stage_state:
-                        layout_in.append((f'data_{bit - 1}_{idx_out_val * 2 + 1}', self.data_width))
-
-                @read_pipe.stage(m, i=layout_in, o=layout_out)
-                def _(arg):
-                    res = {}
-                    idx_bit = getattr(arg, f'idx{bit}')
-                    for idx_out_val in idxs:
-                        v0 = get_stage(arg, idx_out_val * 2)
-                        v1 = get_stage(arg, idx_out_val * 2 + 1)
-                        if idx_out_width == 0:
-                            fld = 'data'
-                        else:
-                            fld = f'data_{bit}_{idx_out_val}'
-                        if v0 is None:
-                            res[fld] = v1
-                        elif v1 is None:
-                            res[fld] = v0
-                        else:
-                            res[fld] = Mux(idx_bit, v1, v0)
-                    return res
-
-            stage_state = next_stage_state
+            @read_pipe.stage(m, i=layout_in, o=layout_out)
+            def _(arg):
+                res = {}
+                for value in batch:
+                    v0, v1 = value.expr
+                    v0 = getattr(arg, v0.value) if isinstance(v0.value, str) else v0.value
+                    v1 = getattr(arg, v1.value) if isinstance(v1.value, str) else v1.value
+                    idx_bit = getattr(arg, f'idx{value.bit}')
+                    res[value.value] = Mux(idx_bit, v1, v0)
+                return res
 
         read_pipe.fifo(depth=2)
 
