@@ -103,7 +103,7 @@ assert_max_size(Wait2Args, 16 * 2 - 4)
 assert_max_size(TTLSet16Args, 16 * 2 - 4)
 assert_max_size(DDSSet16Args, 16 * 2 - 4)
 
-### 32 bit instructions
+### 48 bit instructions
 
 class WaitTrigArgs(Struct):
     chn: 8
