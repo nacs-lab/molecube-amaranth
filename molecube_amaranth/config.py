@@ -7,7 +7,7 @@ from . import io
 # Change this version when making backward incompatible changes.
 MAJOR_VERSION = 5
 # Change this version when adding new features
-MINOR_VERSION = 4
+MINOR_VERSION = 5
 
 @dataclass(kw_only=True)
 class Config:
