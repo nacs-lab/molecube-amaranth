@@ -131,9 +131,10 @@ class InstRunner(Elaboratable):
         # Run state
         state = Signal(RunState, init=RunState.FETCH)
         check_timing = Signal(1)
-        wait_cycle = Signal(24 + self.clock_shift)
-        trig_lower_edge = Signal(1)
-        trig_chn = Signal(8)
+        wait_cycle = Signal(24 + self.clock_shift, reset_less=True)
+        assign_xvalue(m, wait_cycle)
+        trig_lower_edge = Signal(reset_less=True)
+        trig_chn = Signal(8, reset_less=True)
         trig_ttl = self.pulseio.ttlin.i.bit_select(trig_chn, 1)
 
         # Status
@@ -154,7 +155,7 @@ class InstRunner(Elaboratable):
         pulse_hold = self.csr.timing_ctrl[7]
         pulse_init = self.csr.timing_ctrl[8]
 
-        force_release = Signal(1)
+        force_release = Signal()
         with m.If(self.fifos.cmd_fifo.full):
             m.d.sync += force_release.eq(1)
 
@@ -282,7 +283,8 @@ class InstRunner(Elaboratable):
 
         read_decoded = decode_pipe.create_external(o=DECODED_INST, i=[])
 
-        wait_end = Signal()
+        wait_end = Signal(reset_less=True)
+        assign_xvalue(m, wait_end)
         def dec_wait():
             # The branch out condition is `wait_cycle == 2`
             # which means the pre-decrement value is `wait_cycle == 3`
@@ -291,10 +293,10 @@ class InstRunner(Elaboratable):
             m.d.sync += [wait_cycle.eq(wait_cycle - 1),
                          wait_end.eq(wait_cycle[2:] == 0)]
 
-        exe_inst = Signal(DECODED_INST)
-        exe_trig_enable = Signal(1)
-        assign_xvalue(m, exe_trig_enable)
+        exe_inst = Signal(DECODED_INST, reset_less=True)
+        exe_trig_enable = Signal(reset_less=True)
         assign_xvalue(m, exe_inst)
+        assign_xvalue(m, exe_trig_enable)
 
         with Transaction().body(m, ready=~pulses_finished):
             self.csr.dbg_inst_cycle.count(m)
@@ -421,8 +423,6 @@ class InstRunner(Elaboratable):
             self.csr.dbg_result_consumed.clear(m)
             # self.csr.dbg_ttl_cycle.clear(m)
             # self.csr.dbg_wait_cycle.clear(m)
-            assign_xvalue(m, wait_cycle)
-            assign_xvalue(m, wait_end)
             m.d.sync += [state.eq(RunState.FETCH),
                          check_timing.eq(0),
                          underflow.eq(0),
@@ -546,7 +546,7 @@ class InstReader(Elaboratable):
 
         delay_count = 7
 
-        counter = Signal(range(delay_count))
+        counter = Signal(range(delay_count), reset_less=True)
         idle = Signal(init=1)
         ready = Signal()
 

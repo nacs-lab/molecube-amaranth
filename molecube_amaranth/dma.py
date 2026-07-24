@@ -21,8 +21,8 @@ class CountKeeper(Elaboratable):
     def elaborate(self, plat):
         m = TModule()
 
-        cur_count = Signal(self.width)
-        next_count = Signal(self.width)
+        cur_count = Signal(self.width, reset_less=True)
+        next_count = Signal(self.width, reset_less=True)
 
         cur_valid = Signal()
         next_valid = Signal()
@@ -110,7 +110,7 @@ class AXIReadStream(Elaboratable):
 
         m.submodules.count_keeper = count_keeper = CountKeeper(self.blocks_width)
 
-        next_addr = Signal(self.addr_width - self.align_width)
+        next_addr = Signal(self.addr_width - self.align_width, reset_less=True)
 
         request = Method(i=[('addr', self.addr_width - self.align_width)])
         @def_method(m, request, combiner=oring_combiner, nonexclusive=True)

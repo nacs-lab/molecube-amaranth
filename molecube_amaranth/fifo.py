@@ -175,7 +175,7 @@ class UpsizeFifo(Elaboratable):
         m.submodules.fifo = fifo = self._fifo
 
         part_count = Signal(range(self.n))
-        partial_data = Signal(self.width_in * (self.n - 1))
+        partial_data = Signal(self.width_in * (self.n - 1), reset_less=True)
 
         @def_method(m, self.write)
         def _(data):

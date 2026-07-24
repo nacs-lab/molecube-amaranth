@@ -40,7 +40,7 @@ class InstCutter(Elaboratable):
         buff_len = Signal(3)
         # Last bits are the valid ones,
         # the number of valid blocks is determined by buff_len
-        buff = Signal(16 * 6)
+        buff = Signal(16 * 6, reset_less=True)
 
         m.submodules.fifo = fifo = SyncFIFOBuffered(width=48, depth=3)
         m.submodules.in_adaptor = in_adaptor = InAdaptor.from_signal(

@@ -154,8 +154,8 @@ class DDSController(Elaboratable):
                      ddsio.cs.o.eq(~dds_cs)]
 
         fsm_state = Signal(FSMState)
-        hold_cnt = Signal(5)
-        hold_end = Signal()
+        hold_cnt = Signal(5, reset_less=True)
+        hold_end = Signal(reset_less=True)
 
         dds_next_addr = Signal(6)
         dds_next_data = Signal(16)
@@ -166,8 +166,8 @@ class DDSController(Elaboratable):
         wr_cache = regs_cache.write_port()
 
         wr_cache_en = Signal()
-        wr_cache_addr = Signal(6 + 4)
-        wr_cache_data = Signal(16)
+        wr_cache_addr = Signal(6 + 4, reset_less=True)
+        wr_cache_data = Signal(16, reset_less=True)
 
         reg_chain(m, input=Cat(wr_cache_en, wr_cache_addr, wr_cache_data),
                  output=Cat(wr_cache.en, wr_cache.addr, wr_cache.data), levels=2)
@@ -225,7 +225,7 @@ class DDSController(Elaboratable):
         #
         # For multiple read we may or may not need to deassert and reassert read enable
 
-        final_result = Signal(32)
+        final_result = Signal(32, reset_less=True)
         write_result = Signal(1)
         assign_xvalue(m, final_result)
 

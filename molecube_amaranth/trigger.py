@@ -26,8 +26,8 @@ class TriggerController(Elaboratable):
         ttlin = Signal.like(self.ttlin.i)
         m.d.sync += ttlin.eq(self.ttlin.i)
 
-        trig_chn = Signal(range(len(ttlin)))
-        trig_edge = Signal()
+        trig_chn = Signal(range(len(ttlin)), reset_less=True)
+        trig_edge = Signal(reset_less=True)
         trig_ttl = Signal()
         m.d.sync += trig_ttl.eq(ttlin.bit_select(trig_chn, 1) ^ trig_edge)
 

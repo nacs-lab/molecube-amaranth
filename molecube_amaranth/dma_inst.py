@@ -452,8 +452,8 @@ class DMAInstRunner(Elaboratable):
         idling = Signal(init=1)
         m.d.sync += idling.eq(0)
 
-        output_action = Signal(self.OutputAction)
-        counter = Signal(28)
+        output_action = Signal(self.OutputAction, reset_less=True)
+        counter = Signal(28, reset_less=True)
         output_en = Signal()
         with Transaction().body(m, ready=output_en):
             with m.If(output_action.clockout_en):

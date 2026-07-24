@@ -76,8 +76,8 @@ class Registers(Elaboratable):
         self.timing_ctrl = Signal(self.REG_WIDTH)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
         self.loopback = Signal(self.REG_WIDTH)
-        self.dds0_reg = Signal(self.REG_WIDTH)
-        self.dds1_reg = Signal(self.REG_WIDTH)
+        self.dds0_reg = Signal(self.REG_WIDTH, reset_less=True)
+        self.dds1_reg = Signal(self.REG_WIDTH, reset_less=True)
         self.dma_status = Signal(DMAStatus, init={'cmd_empty': 1})
         self.dma_ctrl = Signal(DMACtrl)
 

@@ -31,17 +31,17 @@ class SPIController(Elaboratable):
         m = TModule()
 
         # Data received on SPI, MSB first
-        result_data = Signal(32)
+        result_data = Signal(32, reset_less=True)
 
         # Sending/receiving
-        status = Signal(self.spi_layout)
+        status = Signal(self.spi_layout, reset_less=True)
         # Chip selection, active high
         spi_cs = Signal(4)
         # SPI clock
         spi_sclk = Signal(1, init=1)
-        spi_sclk_edges = Signal(range(2 * 32 + 1))
+        spi_sclk_edges = Signal(range(2 * 32 + 1), reset_less=True)
 
-        div_cycle = Signal(self.div_width)
+        div_cycle = Signal(self.div_width, reset_less=True)
 
         spiio = self.spiio
 
@@ -60,11 +60,11 @@ class SPIController(Elaboratable):
                          # since we might not be idling in the correct clock level
                          spi_sclk.eq(arg.clk_pol)]
 
-        final_result = Signal(32)
+        final_result = Signal(32, reset_less=True)
         write_result = Signal(1)
         assign_xvalue(m, final_result)
 
-        falling_output = Signal(1)
+        falling_output = Signal(1, reset_less=True)
         m.d.sync += falling_output.eq(status.clk_pha^status.clk_pol)
 
         with m.If(self.busy):
@@ -95,6 +95,7 @@ class SPIController(Elaboratable):
                 with m.If((spi_sclk_edges >> 1) == status.nbits_minus_1 + 1):
                     assign_xvalue(m, spi_sclk_edges)
                     assign_xvalue(m, div_cycle)
+                    assign_xvalue(m, status)
                     m.d.sync += [self.busy.eq(0),
                                  spi_cs.eq(0),
                                  spi_sclk.eq(1),
@@ -104,6 +105,9 @@ class SPIController(Elaboratable):
                                      final_result.eq(result_data)]
                 with m.Else():
                     m.d.sync += spi_sclk.eq(~spi_sclk)
+        with m.Else():
+            assign_xvalue(m, spi_sclk_edges)
+            assign_xvalue(m, div_cycle)
 
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)

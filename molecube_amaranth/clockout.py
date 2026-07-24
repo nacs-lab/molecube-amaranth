@@ -17,7 +17,7 @@ class ClockOutController(Elaboratable):
     def elaborate(self, plat):
         m = TModule()
 
-        counter = Signal(self.div_width)
+        counter = Signal(self.div_width, reset_less=True)
         divider = Signal(self.div_width, init=self.OFF)
         out = Signal(1)
         m.d.comb += [self.clockoutio.o.eq(out),

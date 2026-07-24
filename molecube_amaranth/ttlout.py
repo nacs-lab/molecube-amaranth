@@ -50,9 +50,9 @@ class TTLOutController(Elaboratable):
 
         m.submodules.set_pipe = set_pipe = PipelineBuilder()
         set_en = Signal()
-        set_byte = Signal(5)
-        set_hi = Signal(8)
-        set_lo = Signal(8)
+        set_byte = Signal(5, reset_less=True)
+        set_hi = Signal(8, reset_less=True)
+        set_lo = Signal(8, reset_less=True)
         m.d.sync += set_en.eq(0)
         assign_xvalue(m, Cat(set_byte, set_hi, set_lo))
         @def_method(m, self.set_byte_user, singlecaller=True)
