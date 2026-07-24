@@ -61,6 +61,8 @@ class TopLevel(Elaboratable):
 
         m.submodules.dma_runner = dma_runner = DMAInstRunner(pulseio, regs,
                                                              ioctrl, dma_ctrl)
+        m.submodules.dma_runner_input = ConnectTrans.create(dma_parser.read,
+                                                            dma_runner.write)
         m.submodules.inst_consumer = InstConsumer(dma_runner.long_wait, ioctrl, fifos,
                                                   clock_shift=self.config.CLOCK_SHIFT)
 

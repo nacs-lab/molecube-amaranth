@@ -198,7 +198,7 @@ def _OutputAction(nttl):
         clockout: ClockOutDecode
 
         ttl_en: 1
-        ttl: _TTLDecode(nttl)
+        ttl: _TTLDecode(nttl).as_shape()
 
         dds0_en: 1
         dds0: DDSDecode
@@ -209,7 +209,7 @@ def _OutputAction(nttl):
         dac_en: 1
         dac: DACDecode
 
-    return OutputAction
+    return OutputAction.as_shape()
 
 class DMAInstParser(Elaboratable):
     def __init__(self, csr, nttl):
