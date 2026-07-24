@@ -375,8 +375,11 @@ class DMAInstParser(Elaboratable):
                                                                  ('action', OutputAction)],
                                                                 17)
 
-        @decode_pipe.stage(m)
+        @decode_pipe.stage(m, o=[('en', 1), ('is_trig', 1), ('wait', WaitAction),
+                                 ('action', OutputAction)])
         def _(opcode, trivial, wait, ttl, dds):
+            en = Signal()
+
             output_cache = Signal(OutputAction)
             wait_action = Signal(WaitAction)
 
@@ -388,8 +391,7 @@ class DMAInstParser(Elaboratable):
 
             with m.Switch(opcode):
                 with m.Case(DecodedOpCode.WAIT, DecodedOpCode.WAIT_TRIG):
-                    decoded_fifo.write(m, is_trig=is_trig, wait=wait_action,
-                                       action=output_cache)
+                    m.d.av_comb += en.eq(1)
                     for output in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
                         assign_xvalue(m, getattr(output_cache, output))
                         m.d.sync += getattr(output_cache, f'{output}_en').eq(0)
@@ -413,6 +415,14 @@ class DMAInstParser(Elaboratable):
                                  output_cache.dac.eq(trivial.dac)]
                 with m.Default():
                     assign_xvalue(m, output_cache)
+
+            return dict(en=en, is_trig=is_trig, wait=wait_action,
+                        action=output_cache)
+
+        @decode_pipe.stage(m)
+        def _(en, is_trig, wait, action):
+            with m.If(en):
+                decoded_fifo.write(m, is_trig=is_trig, wait=wait, action=action)
 
         self.read.provide(decoded_fifo.read)
 
