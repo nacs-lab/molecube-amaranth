@@ -128,7 +128,8 @@ class DDSController(Elaboratable):
             assert self.bus_id == 1
             dds_reg_out = self.csr.dds1_reg
 
-        _, dds_reg_out = reg_chain(m, output=dds_reg_out, levels=2)
+        _, dds_reg_out = reg_chain(m, output=dds_reg_out, levels=2,
+                                   reset_input=False, reset_mid=False)
 
         dds_reset = Signal(1)
         dds_rd = Signal(1)
@@ -169,8 +170,11 @@ class DDSController(Elaboratable):
         wr_cache_addr = Signal(6 + 4, reset_less=True)
         wr_cache_data = Signal(16, reset_less=True)
 
-        reg_chain(m, input=Cat(wr_cache_en, wr_cache_addr, wr_cache_data),
-                 output=Cat(wr_cache.en, wr_cache.addr, wr_cache.data), levels=2)
+        reg_chain(m, input=wr_cache_en,
+                  output=wr_cache.en, levels=2)
+        reg_chain(m, input=Cat(wr_cache_addr, wr_cache_data),
+                  output=Cat(wr_cache.addr, wr_cache.data), levels=2,
+                  reset_mid=False)
 
         m.d.sync += wr_cache_en.eq(0)
         assign_xvalue(m, wr_cache_addr)

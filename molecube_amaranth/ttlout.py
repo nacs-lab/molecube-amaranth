@@ -7,7 +7,7 @@ from amaranth.utils import ceil_log2
 from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
-from .utils import assign_xvalue, oring_combiner, reg_chain
+from .utils import assign_xvalue, oring_combiner
 
 class TTLOutController(Elaboratable):
     def __init__(self, ttloutio, csr, *, delay=0):

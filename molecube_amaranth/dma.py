@@ -169,12 +169,18 @@ class DMAController(Elaboratable):
                                  fifos.dds1_cmd_fifo.full)]
 
         dma_status = self.csr.dma_status
-        reg_chain(m, input=running, output=dma_status.running, levels=2)
-        reg_chain(m, input=underflow, output=dma_status.underflow, levels=2)
-        reg_chain(m, input=transfer_count, output=dma_status.transfer_count, levels=2)
-        reg_chain(m, input=trig_timeout, output=dma_status.trig_timeout, levels=2)
-        reg_chain(m, input=cmd_empty, output=dma_status.cmd_empty, levels=2)
-        reg_chain(m, input=cmd_full, output=dma_status.cmd_full, levels=2)
+        reg_chain(m, input=running, output=dma_status.running, levels=2,
+                  reset_output=False, reset_mid=False)
+        reg_chain(m, input=underflow, output=dma_status.underflow, levels=2,
+                  reset_output=False, reset_mid=False)
+        reg_chain(m, input=transfer_count, output=dma_status.transfer_count,
+                  levels=2, reset_output=False, reset_mid=False)
+        reg_chain(m, input=trig_timeout, output=dma_status.trig_timeout, levels=2,
+                  reset_output=False, reset_mid=False)
+        reg_chain(m, input=cmd_empty, output=dma_status.cmd_empty, levels=2,
+                  reset_output=False, reset_mid=False)
+        reg_chain(m, input=cmd_full, output=dma_status.cmd_full, levels=2,
+                  reset_output=False, reset_mid=False)
 
         # Address has to be 128bytes aligned, each block cannot cross 1 MB boundary
         align_width = 7

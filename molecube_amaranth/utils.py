@@ -90,10 +90,11 @@ def get_init(obj):
         raise TypeError(f"Cannot get init value for {obj!r}")
 
 class RegChain(Elaboratable):
-    def __init__(self, output, input, levels):
+    def __init__(self, output, input, levels, *, reset_less=False):
         self.input = input
         self.output = output
         self.levels = levels
+        self.reset_less = reset_less
 
     def elaborate(self, plat):
         m = Module()
@@ -103,14 +104,14 @@ class RegChain(Elaboratable):
         else:
             src = self.input
             for _ in range(self.levels - 1):
-                tgt = Signal.like(src, init=get_init(src))
+                tgt = Signal.like(src, init=get_init(src), reset_less=self.reset_less)
                 m.d.sync += tgt.eq(src)
                 src = tgt
             m.d.sync += self.output.eq(src)
 
         return m
 
-def reg_chain(m, *, input=None, levels, output=None):
+def reg_chain(m, *, input=None, levels, output=None, reset_input=True, reset_mid=True, reset_output=True):
     if input is None and output is None:
         raise TypeError("At least one of input and output must be provided")
     if levels == 0:
@@ -119,8 +120,8 @@ def reg_chain(m, *, input=None, levels, output=None):
         if input is None:
             return output, output
     if output is None:
-        output = Signal.like(input)
+        output = Signal.like(input, reset_less=not reset_output)
     elif input is None:
-        input = Signal.like(output, init=get_init(output))
-    m.submodules += RegChain(output, input, levels)
+        input = Signal.like(output, init=get_init(output), reset_less=not reset_input)
+    m.submodules += RegChain(output, input, levels, reset_less=not reset_mid)
     return output, input

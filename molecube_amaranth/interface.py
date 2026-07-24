@@ -14,7 +14,7 @@ from .fifo import BufferedFifo
 from .utils import xvalue, reg_chain
 
 def relaxed_read_shadow(m, reg):
-    r2 = Signal.like(reg)
+    r2 = Signal.like(reg, reset_less=True)
     r2.attrs["molecube.vivado.false_path_to"] = "TRUE"
     m.d.sync += r2.eq(reg)
     return r2
@@ -152,8 +152,10 @@ class ControlInterface(Elaboratable):
                             'dds_timing2', 'loopback'):
                 rd_reg = relaxed_read_shadow(m, rd_real_reg)
             else:
-                rd_reg, _ = reg_chain(m, input=rd_real_reg, levels=2)
-            _, wr_reg = reg_chain(m, output=wr_real_reg, levels=2)
+                rd_reg, _ = reg_chain(m, input=rd_real_reg, levels=2,
+                                      reset_output=False, reset_mid=False)
+            _, wr_reg = reg_chain(m, output=wr_real_reg, levels=2,
+                                  reset_mid=False)
             setattr(wr_shadow, reg_name, wr_reg)
             setattr(rd_shadow, reg_name, rd_reg)
 
@@ -164,7 +166,8 @@ class ControlInterface(Elaboratable):
                             'dbg_result_count', 'dds0_reg', 'dds1_reg'):
                 rd_reg = relaxed_read_shadow(m, real_reg)
             else:
-                rd_reg, _ = reg_chain(m, input=real_reg, levels=2)
+                rd_reg, _ = reg_chain(m, input=real_reg, levels=2,
+                                      reset_output=False, reset_mid=False)
             setattr(rd_shadow, reg_name, rd_reg)
 
         for (k, c) in csr.all_counters.items():
