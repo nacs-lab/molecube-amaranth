@@ -5,9 +5,9 @@ from amaranth import *
 from amaranth_axi.adaptors import InAdaptor
 
 from transactron import TModule, Transaction, Method, def_method
+from transactron.lib import PipelineBuilder, Connect, BasicFifo
 
 from .utils import assign_xvalue, xvalue
-from .fifo import SyncFIFOBuffered
 
 # Instruction format:
 #   [len: 2][opcode: 2][data: 12/28/44]
@@ -42,26 +42,20 @@ class InstCutter(Elaboratable):
         # the number of valid blocks is determined by buff_len
         buff = Signal(16 * 6, reset_less=True)
 
-        m.submodules.fifo = fifo = SyncFIFOBuffered(width=48, depth=3)
-        m.submodules.in_adaptor = in_adaptor = InAdaptor.from_signal(
-            ready=fifo.r_en, valid=fifo.r_rdy, data=fifo.r_data)
-
-        en = fifo.w_en
-        inst = fifo.w_data
-
-        def parse_undef():
-            assign_xvalue(m, inst, domain='comb')
+        inst_en = Signal(reset_less=True)
+        inst = Signal(48, reset_less=True)
+        assign_xvalue(m, inst_en, domain='av_comb')
+        assign_xvalue(m, inst, domain='av_comb')
 
         def full_undef():
-            parse_undef()
             assign_xvalue(m, buff_len)
-            assign_xvalue(m, en, domain='comb')
+            assign_xvalue(m, inst_en, domain='av_comb')
 
         def assign_inst(inst, data):
             ldata = len(data)
             linst = len(inst)
             assert ldata <= linst
-            m.d.comb += inst.eq(Cat(data, xvalue(m, linst - ldata)))
+            m.d.av_comb += inst.eq(Cat(data, xvalue(m, linst - ldata)))
 
         def assign_len(l):
             assert l <= 6
@@ -73,9 +67,8 @@ class InstCutter(Elaboratable):
                 assign_len(ldata - linst)
                 assign_inst(inst, data[:16 * linst])
             else:
-                m.d.comb += en.eq(0)
+                m.d.av_comb += inst_en.eq(0)
                 assign_len(ldata)
-                assign_xvalue(m, inst, domain='comb')
 
         def parse(data):
             with m.Switch(data[:2]):
@@ -88,51 +81,58 @@ class InstCutter(Elaboratable):
                 with m.Default():
                     full_undef()
 
-        @def_method(m, self.write, ready=(~buff_len[2]) & fifo.w_rdy)
-        def _(data):
-            full_data = Cat(buff, data)
-            m.d.sync += buff.eq(full_data[16 * 4:])
-            m.d.comb += en.eq(1)
+        m.submodules.data_conn = data_conn = Connect([('data', 64)])
+        self.write.provide(data_conn.write)
 
-            with m.Switch(buff_len[:2]):
-                with m.Case(0):
-                    parse(full_data[16 * 6:])
-                with m.Case(1):
-                    parse(full_data[16 * 5:])
-                with m.Case(2):
-                    parse(full_data[16 * 4:])
-                with m.Case(3):
-                    parse(full_data[16 * 3:])
-                with m.Default():
-                    full_undef()
+        m.submodules.cut_pipe = cut_pipe = PipelineBuilder()
 
-        with Transaction().body(m, ready=~self.write.run & fifo.w_rdy):
-            m.d.comb += en.eq(1)
-            with m.Switch(buff_len):
-                with m.Case(0):
-                    m.d.comb += en.eq(0)
-                    assign_len(0)
-                    assign_xvalue(m, inst, domain='comb')
-                with m.Case(1):
-                    parse(buff[16 * 5:])
-                with m.Case(2):
-                    parse(buff[16 * 4:])
-                with m.Case(3):
-                    parse(buff[16 * 3:])
-                with m.Case(4):
-                    parse(buff[16 * 2:])
-                with m.Case(5):
-                    parse(buff[16 * 1:])
-                with m.Case(6):
-                    parse(buff)
-                with m.Default():
-                    full_undef()
-
-        with m.If(~fifo.w_rdy):
-            parse_undef()
-
-        @def_method(m, self.read)
+        @cut_pipe.stage(m, o=[('en', 1), ('inst', 48)])
         def _():
-            return in_adaptor.input(m).DATA
+            in_trans = Transaction()
+            m.d.av_comb += inst_en.eq(1)
+            with in_trans.body(m, ready=~buff_len[2]):
+                full_data = Cat(buff, data_conn.read(m))
+
+            with m.If(in_trans.run):
+                m.d.sync += buff.eq(full_data[16 * 4:])
+
+                with m.Switch(buff_len[:2]):
+                    with m.Case(0):
+                        parse(full_data[16 * 6:])
+                    with m.Case(1):
+                        parse(full_data[16 * 5:])
+                    with m.Case(2):
+                        parse(full_data[16 * 4:])
+                    with m.Case(3):
+                        parse(full_data[16 * 3:])
+            with m.Else():
+                with m.Switch(buff_len):
+                    with m.Case(0):
+                        m.d.av_comb += inst_en.eq(0)
+                        assign_len(0)
+                    with m.Case(1):
+                        parse(buff[16 * 5:])
+                    with m.Case(2):
+                        parse(buff[16 * 4:])
+                    with m.Case(3):
+                        parse(buff[16 * 3:])
+                    with m.Case(4):
+                        parse(buff[16 * 2:])
+                    with m.Case(5):
+                        parse(buff[16 * 1:])
+                    with m.Case(6):
+                        parse(buff)
+                    with m.Default():
+                        full_undef()
+            return dict(en=inst_en, inst=inst)
+
+        m.submodules.fifo = fifo = BasicFifo([('inst', 48)], 2)
+
+        @cut_pipe.stage(m)
+        def _(en, inst):
+            with m.If(en):
+                fifo.write(m, inst)
+
+        self.read.provide(fifo.read)
 
         return m
