@@ -113,8 +113,8 @@ class BufferedFifo(wiring.Component):
             full=Out(1),
             empty=Out(1),
             fifo_level=Out(range(depth)),
-            input_level=Out(1),
-            output_level=Out(1),
+            read_level=Out(1),
+            write_level=Out(1),
         ))
         self.depth = depth
         self.write = Method(i=layout)
@@ -143,8 +143,8 @@ class BufferedFifo(wiring.Component):
         m.d.comb += [self.full.eq(~fifo.w_rdy),
                      self.empty.eq(~fifo.r_rdy),
                      self.fifo_level.eq(fifo.level),
-                     self.input_level.eq(in_adaptor.LEVEL),
-                     self.output_level.eq(out_adaptor.LEVEL)]
+                     self.read_level.eq(in_adaptor.LEVEL),
+                     self.write_level.eq(out_adaptor.LEVEL)]
 
         return m
 
@@ -166,7 +166,7 @@ class UpsizeFifo(Elaboratable):
         self.read = self._fifo.read
         self.write = Method(i=self._layout_in)
 
-        for name in ('full', 'empty', 'fifo_level', 'input_level', 'output_level'):
+        for name in ('full', 'empty', 'fifo_level', 'read_level', 'write_level'):
             setattr(self, name, getattr(self._fifo, name))
 
     def elaborate(self, plat):
@@ -216,13 +216,13 @@ class ResultFifo(Elaboratable):
         # Only include the out adaptor one if the actual fifo is not empty
         # Otherwise we can't guarantee that
         # the user can actually read all of those out yet.
-        m.d.comb += self.level.eq((fifo.fifo_level + fifo.input_level) +
-                                  (fifo.output_level & ~fifo.empty))
+        m.d.comb += self.level.eq((fifo.fifo_level + fifo.read_level) +
+                                  (fifo.write_level & ~fifo.empty))
 
         # Construct a fast and conservative result level for user API
         est_level = Signal.like(fifo.fifo_level)
-        m.d.comb += est_level.eq((fifo.fifo_level + fifo.input_level) |
-                                 (fifo.output_level & ~fifo.empty))
+        m.d.comb += est_level.eq((fifo.fifo_level + fifo.read_level) |
+                                 (fifo.write_level & ~fifo.empty))
 
         user_len = len(self.user_level)
         user_level = est_level[:user_len]
