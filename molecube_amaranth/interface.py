@@ -140,10 +140,7 @@ class ControlInterface(Elaboratable):
 
         for reg_name in ['ttl_hi_mask', 'ttl_lo_mask', 'dma_ttl_mask', 'timing_ctrl',
                          'dds_timing1', 'dds_timing2', 'loopback', 'dma_ctrl']:
-            if (reg_name == 'ttl_hi_mask' or reg_name == 'ttl_lo_mask' or
-                reg_name == 'dma_ttl_mask'):
-                rd_real_reg = wr_real_reg = getattr(csr, reg_name)[:self.ioctrl.nttlout]
-            elif reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
+            if reg_name == 'dds_timing1' or reg_name == 'dds_timing2':
                 # Let the property getter return different padding registers for read/write
                 rd_real_reg = getattr(csr, reg_name)
                 wr_real_reg = getattr(csr, reg_name)
@@ -163,10 +160,6 @@ class ControlInterface(Elaboratable):
         for reg_name in ['ttl_out', 'ttl_in', 'timing_status', 'clockout_div',
                          'dbg_result_count', 'dds0_reg', 'dds1_reg', 'dma_status']:
             real_reg = Signal.cast(getattr(csr, reg_name))
-            if reg_name == 'ttl_out':
-                real_reg = real_reg[:self.ioctrl.nttlout]
-            elif reg_name == 'ttl_in':
-                real_reg = real_reg[:self.ioctrl.nttlin]
             if reg_name in ('ttl_out', 'ttl_in', 'clockout_div',
                             'dbg_result_count', 'dds0_reg', 'dds1_reg'):
                 rd_reg = relaxed_read_shadow(m, real_reg)

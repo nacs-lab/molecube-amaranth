@@ -147,16 +147,16 @@ class InterfaceWrapper(Elaboratable):
         }
 
     def ttl_out_reg(self, idx):
-        return self.csr.ttl_out[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_out[idx * 32:(idx + 1) * 32]
 
     def ttl_hi_reg(self, idx):
-        return self.csr.ttl_hi_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_hi_mask[idx * 32:(idx + 1) * 32]
 
     def ttl_lo_reg(self, idx):
-        return self.csr.ttl_lo_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
+        return self.csr.ttl_lo_mask[idx * 32:(idx + 1) * 32]
 
     def dma_ttl_reg(self, idx):
-        return self.csr.dma_ttl_mask[:self.ioctrl.nttlout][idx * 32:(idx + 1) * 32]
+        return self.csr.dma_ttl_mask[idx * 32:(idx + 1) * 32]
 
     def randomize_read_only_regs(self, sim):
         vals = {}

@@ -62,15 +62,18 @@ class DMACtrl(Struct):
 
 class Registers(Elaboratable):
     REG_WIDTH = 32
-    TTL_WIDTH = 256
     CLKDIV_WIDTH = 8
     def __init__(self, config):
-        self.ttl_hi_mask = Signal(self.TTL_WIDTH)
-        self.ttl_lo_mask = Signal(self.TTL_WIDTH)
-        self.ttl_out = Signal(self.TTL_WIDTH)
-        self.dma_ttl_mask = Signal(self.TTL_WIDTH)
+        nttl_out = len(config.TTLOUT.split(' '))
+        nttl_in = len(config.TTLIN.split(' '))
+        assert nttl_out <= 256
+        assert nttl_in <= 256
+        self.ttl_hi_mask = Signal(nttl_out)
+        self.ttl_lo_mask = Signal(nttl_out)
+        self.ttl_out = Signal(nttl_out)
+        self.dma_ttl_mask = Signal(nttl_out)
 
-        self.ttl_in = Signal(self.TTL_WIDTH)
+        self.ttl_in = Signal(nttl_in)
 
         self.timing_status = Signal(self.REG_WIDTH)
         self.timing_ctrl = Signal(self.REG_WIDTH)
