@@ -10,6 +10,8 @@ from transactron.lib import PipelineBuilder, Connect
 
 from amaranth_axi.utils import StructCat
 
+from types import SimpleNamespace
+
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import BufferedFifo
 from .utils import assign_xvalue
@@ -380,7 +382,25 @@ class DMAInstParser(Elaboratable):
         def _(opcode, trivial, wait, ttl, dds):
             en = Signal()
 
+            g = SimpleNamespace()
+            g.clockout_en = Signal()
+            g.clockout = Signal(ClockOutDecode, reset_less=True)
+            g.ttl_en = Signal()
+            g.ttl = Signal(TTLDecode, reset_less=True)
+            g.dds0_en = Signal()
+            g.dds0 = Signal(DDSDecode, reset_less=True)
+            g.dds1_en = Signal()
+            g.dds1 = Signal(DDSDecode, reset_less=True)
+            g.dac_en = Signal()
+            g.dac = Signal(DACDecode, reset_less=True)
+
             output_cache = Signal(OutputAction)
+            for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
+                name_en = f'{name}_en'
+                m.d.top_comb += [
+                    getattr(output_cache, name).eq(getattr(g, name)),
+                    getattr(output_cache, name_en).eq(getattr(g, name_en))]
+
             wait_action = Signal(WaitAction)
 
             # Only valid if the opcode is actually wait or wait_trig
@@ -392,29 +412,32 @@ class DMAInstParser(Elaboratable):
             with m.Switch(opcode):
                 with m.Case(DecodedOpCode.WAIT, DecodedOpCode.WAIT_TRIG):
                     m.d.av_comb += en.eq(1)
-                    for output in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
-                        assign_xvalue(m, getattr(output_cache, output))
-                        m.d.sync += getattr(output_cache, f'{output}_en').eq(0)
+                    for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
+                        assign_xvalue(m, getattr(g, name))
+                        m.d.sync += getattr(g, f'{name}_en').eq(0)
                 with m.Case(DecodedOpCode.CLOCKOUT):
-                    m.d.sync += [output_cache.clockout_en.eq(1),
-                                 output_cache.clockout.eq(trivial.clock_out)]
+                    m.d.sync += [g.clockout_en.eq(1),
+                                 g.clockout.eq(trivial.clock_out)]
                 with m.Case(DecodedOpCode.TTL):
-                    cache_ttl = Signal.cast(output_cache.ttl)
+                    cache_ttl = Signal.cast(g.ttl)
                     cmd_ttl = Signal.cast(ttl)
-                    m.d.sync += [output_cache.ttl_en.eq(1),
-                                 cache_ttl.eq(Mux(output_cache.ttl_en,
+                    m.d.sync += [g.ttl_en.eq(1),
+                                 cache_ttl.eq(Mux(g.ttl_en,
                                                   cache_ttl | cmd_ttl, cmd_ttl))]
                 with m.Case(DecodedOpCode.DDS0):
-                    m.d.sync += [output_cache.dds0_en.eq(1),
-                                 output_cache.dds0.eq(dds)]
+                    m.d.sync += [g.dds0_en.eq(1),
+                                 g.dds0.eq(dds)]
                 with m.Case(DecodedOpCode.DDS1):
-                    m.d.sync += [output_cache.dds1_en.eq(1),
-                                 output_cache.dds1.eq(dds)]
+                    m.d.sync += [g.dds1_en.eq(1),
+                                 g.dds1.eq(dds)]
                 with m.Case(DecodedOpCode.DAC):
-                    m.d.sync += [output_cache.dac_en.eq(1),
-                                 output_cache.dac.eq(trivial.dac)]
+                    m.d.sync += [g.dac_en.eq(1),
+                                 g.dac.eq(trivial.dac)]
                 with m.Default():
-                    assign_xvalue(m, output_cache)
+                    for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
+                        name_en = f'{name}_en'
+                        assign_xvalue(m, getattr(g, name))
+                        assign_xvalue(m, getattr(g, name_en))
 
             return dict(en=en, is_trig=is_trig, wait=wait_action,
                         action=output_cache)
