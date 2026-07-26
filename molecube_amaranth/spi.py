@@ -52,13 +52,18 @@ class SPIController(Elaboratable):
 
         @def_method(m, self.set, combiner=oring_combiner, nonexclusive=True)
         def _(arg):
+            # Assumes set is only called when idle (busy==0) or on the last
+            # busy cycle (the cycle that clears busy to 0).
+            # result_data is initialised here rather than in the setup cycle
+            # because no other path assigns it while idle, so priority is unambiguous.
             assign_xvalue(m, spi_sclk_edges)
             assign_xvalue(m, div_cycle)
             m.d.sync += [self.busy.eq(1),
                          status.eq(arg),
                          # Set up the clock first before asserting chip select
                          # since we might not be idling in the correct clock level
-                         spi_sclk.eq(arg.clk_pol)]
+                         spi_sclk.eq(arg.clk_pol),
+                         result_data.eq(0)]
 
         final_result = Signal(32, reset_less=True)
         write_result = Signal(1)
@@ -69,11 +74,16 @@ class SPIController(Elaboratable):
 
         with m.If(self.busy):
             with m.If(spi_cs == 0):
-                # Setup
+                # Setup: assert chip select; spi_sclk_edges and div_cycle are
+                # set here because set is only called when idle (so spi_cs is
+                # always 0 on the first busy cycle), and result_data was already
+                # reset to 0 by the set method.  spi_sclk_edges and div_cycle
+                # cannot be moved to set: the not-busy block assigns them with
+                # assign_xvalue at higher elaboration priority, which would
+                # override any concrete value written there by set.
                 m.d.sync += [spi_cs.eq(1 << status.id),
                              spi_sclk_edges.eq(0),
-                             div_cycle.eq(status.div),
-                             result_data.eq(0)]
+                             div_cycle.eq(status.div)]
             with m.Elif(div_cycle != 0):
                 m.d.sync += div_cycle.eq(div_cycle - 1)
             with m.Else():

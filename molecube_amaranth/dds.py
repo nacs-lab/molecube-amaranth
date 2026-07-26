@@ -237,13 +237,11 @@ class DDSController(Elaboratable):
             m.d.sync += [hold_cnt.eq(hold_cnt - 1),
                          hold_end.eq(hold_cnt[1:] == 0)]
             with m.Switch(fsm_state):
-                with m.Case(FSMState.IDLE):
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
+                # No IDLE case: under the idle-call assumption set is only called
+                # when busy==0, so IDLE always has hold_end=1 and the ~hold_end
+                # branch is never reached while in IDLE.  If the assumption is
+                # violated (set called while busy), hold_end could be 0 in IDLE
+                # and the Default case below would fire, assigning xvalue to hold_end.
 
                 with m.Case(FSMState.WR_ADSETUP2):
                     assign_xvalue(m, dds_next_data)
@@ -282,6 +280,16 @@ class DDSController(Elaboratable):
                     assign_xvalue(m, dds_need_fud)
         with m.Else():
             with m.Switch(fsm_state):
+                with m.Case(FSMState.IDLE):
+                    # Under the idle-call assumption, set is only called when
+                    # busy==0. hold_end is intentionally NOT assigned here so it
+                    # stays 1, keeping the FSM in this branch until set fires.
+                    assign_xvalue(m, hold_cnt)
+                    assign_xvalue(m, dds_next_data)
+                    assign_xvalue(m, dds_next_addr)
+                    assign_xvalue(m, dds_id)
+                    assign_xvalue(m, dds_need_fud)
+
                 with m.Case(FSMState.WR_ADSETUP1):
                     # Assert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ENABLE1),
@@ -345,9 +353,11 @@ class DDSController(Elaboratable):
                                  dds_fud.eq(0),
                                  dds_addr.eq(0),
                                  dds_data_out.eq(0),
-                                 self.busy.eq(0)]
+                                 self.busy.eq(0),
+                                 # set is assumed idle on next call; hold_end=1
+                                 # ensures we enter the hold_end branch immediately.
+                                 hold_end.eq(1)]
                     assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
                     assign_xvalue(m, dds_id)
@@ -358,9 +368,9 @@ class DDSController(Elaboratable):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  dds_cs.eq(0),
                                  dds_reset.eq(0),
-                                 self.busy.eq(0)]
+                                 self.busy.eq(0),
+                                 hold_end.eq(1)]
                     assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
                     assign_xvalue(m, dds_id)
@@ -401,9 +411,9 @@ class DDSController(Elaboratable):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  dds_cs.eq(0),
                                  dds_data_oe.eq(1),
-                                 self.busy.eq(0)]
+                                 self.busy.eq(0),
+                                 hold_end.eq(1)]
                     assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
                     assign_xvalue(m, dds_id)
