@@ -375,7 +375,7 @@ class DMAInstParser(Elaboratable):
         m.submodules.decoded_fifo = decoded_fifo = BufferedFifo([('is_trig', 1),
                                                                  ('wait', WaitAction),
                                                                  ('action', OutputAction)],
-                                                                16)
+                                                                256)
 
         @decode_pipe.stage(m, o=[('en', 1), ('is_trig', 1), ('wait', WaitAction),
                                  ('action', OutputAction)])
