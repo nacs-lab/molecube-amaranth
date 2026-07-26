@@ -60,13 +60,14 @@ class TestSPI(TestCaseWithSimulator):
                 for n in range(65):
                     await sim.tick()
                 # Wait two cycles to avoid writing to the result fifo simutaniously...
-                await sim.tick()
-                await sim.tick()
+                for _ in range(2):
+                    await sim.tick()
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await fifo_circ.write.call(sim, data=dummy_result2)
 
-                await sim.tick()
+                for _ in range(3):
+                    await sim.tick()
 
                 assert (await fifo_circ.read.call(sim)).data == dummy_result
                 assert (await fifo_circ.read.call(sim)).data == 0
@@ -108,13 +109,14 @@ class TestSPI(TestCaseWithSimulator):
                                      pha=pha, pol=pol, data=data, result=result_data,
                                      ctrl=controller)
                 # Wait two cycles to avoid writing to the result fifo simutaniously...
-                await sim.tick()
-                await sim.tick()
+                for _ in range(2):
+                    await sim.tick()
 
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await fifo_circ.write.call(sim, data=dummy_result2)
 
-                await sim.tick()
+                for _ in range(3):
+                    await sim.tick()
 
                 assert (await fifo_circ.read.call(sim)).data == dummy_result
                 if save_result:

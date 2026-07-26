@@ -74,7 +74,7 @@ class InstRunnerTester(Elaboratable, TTLChecker, ClockoutChecker, DDSChecker, SP
         await self._write_cmd.call(sim, data=v1)
         await self._write_cmd.call(sim, data=v2)
 
-FIFO_LATENCY = 8
+FIFO_LATENCY = 9
 RELEASE_LATENCY = 3
 
 class TestInstRunner(TestCaseWithSimulator):
@@ -981,7 +981,7 @@ class TestInstRunner(TestCaseWithSimulator):
         async def consumer(sim):
             # Set hold
             sim.set(circ.csr.timing_ctrl, 1 << 7)
-            for _ in range((fifo_depth + 2) * 2): # 2 cycles per write
+            for _ in range((fifo_depth + 2) * 2 + 2): # 2 cycles per write
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
             # It takes one extra cycle for force release to trigger
@@ -2255,7 +2255,7 @@ class TestInstConsumer(TestCaseWithSimulator):
             spi1 = circ.pop_spi_check(sim)
             for _ in range(spi_cycle(spi1['div'])):
                 await sim.tick()
-            for _ in range(3):
+            for _ in range(5):
                 await sim.tick()
             if spi1['save_result']:
                 assert sim.get(circ.fifos.result_fifo.level) == 1
@@ -2272,7 +2272,7 @@ class TestInstConsumer(TestCaseWithSimulator):
             spi3 = circ.pop_spi_check(sim)
             for _ in range(spi_cycle(spi3['div']) + CONSUMER_LATENCY):
                 await sim.tick()
-            for _ in range(3):
+            for _ in range(5):
                 await sim.tick()
             if spi2['save_result']:
                 assert sim.get(circ.fifos.result_fifo.level) >= 1

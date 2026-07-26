@@ -49,8 +49,8 @@ class TestFifos(TestCaseWithSimulator):
             for _ in range(100):
                 data = random.randint(0, 0xffff_ffff)
                 await circ.write.call(sim, data=data)
-                await sim.tick()
-                await sim.tick()
+                for _ in range(4):
+                    await sim.tick()
                 data_out = (await circ.read.call(sim)).data
                 assert data_out == data
 
@@ -117,8 +117,37 @@ class TestFifos(TestCaseWithSimulator):
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
 
-    def test_fifo(self):
-        fifo = BufferedFifo([('data', 12), ('data2', 3)], 16)
+    @pytest.mark.parametrize("read_buffered", (False, True))
+    def test_buffered_fifo(self, read_buffered):
+        fifo = BufferedFifo([('data', 12), ('data2', 3)], 16,
+                            read_buffered=read_buffered)
+        circ = SimpleTestCircuit(fifo)
+
+        datas = [dict(data=random.randint(0, (1 << 12) - 1),
+                      data2=random.randint(0, (1 << 3) - 1)) for _ in range(500)]
+
+        async def producer(sim):
+            for data in datas:
+                for _ in range(random.randint(0, 6)):
+                    await sim.tick()
+                await circ.write.call(sim, **data)
+
+        async def consumer(sim):
+            for data in datas:
+                for _ in range(random.randint(0, 6)):
+                    await sim.tick()
+                res = await circ.read.call(sim)
+                assert res.data == data['data']
+                assert res.data2 == data['data2']
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
+
+    @pytest.mark.parametrize("read_buffered", (False, True))
+    def test_buffered_fifo_throughput(self, read_buffered):
+        fifo = BufferedFifo([('data', 12), ('data2', 3)], 16,
+                            read_buffered=read_buffered)
         circ = SimpleTestCircuit(fifo)
 
         datas = [dict(data=random.randint(0, (1 << 12) - 1),
@@ -126,15 +155,50 @@ class TestFifos(TestCaseWithSimulator):
 
         async def producer(sim):
             for data in datas:
-                for _ in range(random.randint(0, 2)):
-                    await sim.tick()
-                await circ.write.call(sim, **data)
+                assert (await circ.write.call_try(sim, **data)) is not None
 
         async def consumer(sim):
+            isfirst = True
             for data in datas:
-                for _ in range(random.randint(0, 2)):
-                    await sim.tick()
-                res = await circ.read.call(sim)
+                if isfirst:
+                    res = await circ.read.call(sim)
+                    isfirst = False
+                else:
+                    res = await circ.read.call_try(sim)
+                assert res is not None
+                assert res.data == data['data']
+                assert res.data2 == data['data2']
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
+
+    @pytest.mark.parametrize("read_buffered", (False, True))
+    def test_buffered_fifo_throughput2(self, read_buffered):
+        fifo = BufferedFifo([('data', 12), ('data2', 3)], 16,
+                            read_buffered=read_buffered)
+        circ = SimpleTestCircuit(fifo)
+
+        datas = [dict(data=random.randint(0, (1 << 12) - 1),
+                      data2=random.randint(0, (1 << 3) - 1)) for _ in range(100)]
+        start_reading = False
+
+        async def producer(sim):
+            nonlocal start_reading
+            for i in range(len(datas)):
+                if (await circ.write.call_try(sim, **datas[i])) is None:
+                    break
+            start_reading = True
+            await circ.write.call(sim, **datas[i])
+            for i in range(i + 1, len(datas)):
+                assert (await circ.write.call_try(sim, **datas[i])) is not None
+
+        async def consumer(sim):
+            while not start_reading:
+                await sim.tick()
+            for data in datas:
+                res = await circ.read.call_try(sim)
+                assert res is not None
                 assert res.data == data['data']
                 assert res.data2 == data['data2']
 

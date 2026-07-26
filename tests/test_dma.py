@@ -392,7 +392,7 @@ class TestDMAController(TestCaseWithSimulator):
             assert sim.get(Signal.cast(circ.csr.dma_status)) == 10 << 8
 
             await circ.queue_cmd.call(sim, first=1)
-            await wait(sim)
+            await wait(sim, 8)
             # Cleared
             assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 
@@ -424,7 +424,7 @@ class TestDMAController(TestCaseWithSimulator):
             assert sim.get(Signal.cast(circ.csr.dma_status)) == 12 << 8
 
             await circ.queue_cmd.call(sim, first=1)
-            await wait(sim)
+            await wait(sim, 8)
             # Cleared
             assert sim.get(Signal.cast(circ.csr.dma_status)) == 8 << 8
 

@@ -203,7 +203,7 @@ class ControlInterface(Elaboratable):
         dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         # Buffer for command fifo to simplify write combinational logic
-        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BufferedFifo([('data', self.data_width)], 3)
+        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BufferedFifo([('data', self.data_width)], 4)
         with Transaction().body(m):
             cmd = cmd_pre_fifo.read(m)
             with m.If(dma_enabled):
@@ -479,7 +479,7 @@ class ControlInterface(Elaboratable):
 
         m.submodules.read_rep_fifo = read_rep_fifo = BufferedFifo(
             [('data', self.data_width), ('resp', 2), ('id', self.id_width),
-             ('last', 1)], 3)
+             ('last', 1)], 4)
 
         read_pipe.call_method(read_rep_fifo.write)
 

@@ -304,7 +304,8 @@ class TestDDS(TestCaseWithSimulator):
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
 
-                await sim.tick()
+                for _ in range(3):
+                    await sim.tick()
 
                 assert (await circ.fifo.read.call(sim)).data == dummy_result
                 assert (await circ.fifo.read.call(sim)).data == data
@@ -343,7 +344,8 @@ class TestDDS(TestCaseWithSimulator):
                 dummy_result2 = random.randint(0, 0xffff_ffff)
                 await circ.fifo.write.call(sim, data=dummy_result2)
 
-                await sim.tick()
+                for _ in range(3):
+                    await sim.tick()
 
                 assert (await circ.fifo.read.call(sim)).data == dummy_result
                 assert (await circ.fifo.read.call(sim)).data == data
