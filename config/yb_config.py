@@ -12,9 +12,9 @@ for bank in range(2):
         elif bank == 0:
             ttl_pins.append(sma_pin(1, 3))
         else:
-            ttl_pins.append(sma_pin(1, 2))
+            ttl_pins.append(sma_pin(0, 4))
 
-ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(0, 4), sma_pin(0, 0)]
+ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(1, 2), sma_pin(0, 0)]
 
 config = Config(TTLIN=' '.join(ttlin_pins), TTLOUT=' '.join(ttl_pins))
 config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0)
