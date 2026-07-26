@@ -34,6 +34,6 @@ class IOController(Elaboratable):
         m.submodules.ttlout = self.ttlout
         m.submodules.trigger = self.trigger
 
-        m.d.sync += self.csr.ttl_in[:self.nttlin].eq(self.pulseio.ttlin.i)
+        m.d.sync += self.csr.ttl_in.eq(self.pulseio.ttlin.i)
 
         return m
