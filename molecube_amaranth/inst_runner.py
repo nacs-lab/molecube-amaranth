@@ -50,10 +50,6 @@ SPI_ARG = FlexibleLayout(59, dict(
     clk_pol=Field(unsigned(1), 32 + 14),
 ))
 
-TTL_DECODE0 = StructLayout(dict(
-    value=unsigned(32),
-    bank=unsigned(3),
-))
 DDS_DECODE0 = StructLayout(dict(
     is_dds1=1,
     arg=DDS_SET_ARG,
@@ -90,16 +86,6 @@ INST_STRUCT = FlexibleLayout(63, dict(
     time_check=Field(unsigned(1), 59),
     opcode=Field(InstOpCode, 60),
 ))
-DECODED_INST = StructLayout(dict(op=InstOpCode,
-                                 ttl=TTL_DECODE0,
-                                 dds=DDS_DECODE0,
-                                 wait=WAIT_DECODE0,
-                                 loopback=32,
-                                 clockout=8,
-                                 spi=SPI_DECODE0,
-                                 time_check=1,
-                                 timer=24,
-                                 timer_end=1))
 TIME_STATUS_STRUCT = FlexibleLayout(32, dict(
     underflow=Field(unsigned(1), 0),
     trigger_timeout=Field(unsigned(1), 1),
@@ -127,6 +113,21 @@ class InstRunner(Elaboratable):
 
         ioctrl = self.ioctrl
         bank_width = ioctrl.ttlout.bank_width
+
+        TTL_DECODE0 = StructLayout(dict(
+            value=unsigned(32),
+            bank=unsigned(bank_width),
+        ))
+        DECODED_INST = StructLayout(dict(op=InstOpCode,
+                                         ttl=TTL_DECODE0,
+                                         dds=DDS_DECODE0,
+                                         wait=WAIT_DECODE0,
+                                         loopback=32,
+                                         clockout=8,
+                                         spi=SPI_DECODE0,
+                                         time_check=1,
+                                         timer=24,
+                                         timer_end=1))
 
         # Run state
         state = Signal(RunState, init=RunState.FETCH)
@@ -177,8 +178,7 @@ class InstRunner(Elaboratable):
             ttlarg = inst.ttl
             ttl = Signal(TTL_DECODE0)
             m.d.top_comb += [ttl.value.eq(ttlarg.value),
-                             ttl.bank[:bank_width].eq(ttlarg.bank[:bank_width])]
-            assign_xvalue(m, ttl.bank[bank_width:], domain='top_comb')
+                             ttl.bank.eq(ttlarg.bank[:bank_width])]
 
             ddsarg = inst.dds
             is_dds1 = ddsarg.id >= 11
@@ -319,7 +319,7 @@ class InstRunner(Elaboratable):
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
                             self.csr.dbg_ttl_count.count(m)
-                            ioctrl.ttlout.set_bank_inst(m, bank=new_inst.ttl.bank[:bank_width],
+                            ioctrl.ttlout.set_bank_inst(m, bank=new_inst.ttl.bank,
                                                         value=new_inst.ttl.value)
                         with m.If(new_inst.timer >> 1): # timer > 1
                             m.d.sync += state.eq(RunState.EXECUTE)
@@ -344,7 +344,7 @@ class InstRunner(Elaboratable):
                         if self.clock_shift != 0:
                             with Transaction().body(m):
                                 self.csr.dbg_ttl_count.count(m)
-                                ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank[:bank_width],
+                                ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
                                                             value=exe_inst.ttl.value)
                     with m.Case(InstOpCode.DDS):
                         with Transaction().body(m):
