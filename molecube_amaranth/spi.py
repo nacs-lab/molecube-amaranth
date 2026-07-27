@@ -42,6 +42,8 @@ class SPIController(Elaboratable):
         spi_sclk_edges = Signal(range(2 * 32 + 1), reset_less=True)
 
         div_cycle = Signal(self.div_width, reset_less=True)
+        div_cycle_is0 = Signal(reset_less=True)
+        div_cycle_end = Signal(reset_less=True)
 
         spiio = self.spiio
 
@@ -77,9 +79,12 @@ class SPIController(Elaboratable):
                 m.d.sync += [spi_cs.eq(1 << status.id),
                              spi_sclk_edges.eq(0),
                              div_cycle.eq(status.div),
+                             div_cycle_is0.eq(status.div == 0),
+                             div_cycle_end.eq(status.div == 0),
                              result_data.eq(0)]
-            with m.Elif(div_cycle != 0):
-                m.d.sync += div_cycle.eq(div_cycle - 1)
+            with m.Elif(~div_cycle_end):
+                m.d.sync += [div_cycle.eq(div_cycle - 1),
+                             div_cycle_end.eq(div_cycle[1:] == 0)]
             with m.Else():
                 # spi_sclk = 0 means this is a rising edge
                 # spi_sclk = 1 means this is a falling edge
@@ -95,10 +100,13 @@ class SPIController(Elaboratable):
                         m.d.sync += result_data.eq((result_data << 1) | spiio.miso.i)
 
                 m.d.sync += [div_cycle.eq(status.div),
+                             div_cycle_end.eq(div_cycle_is0),
                              spi_sclk_edges.eq(spi_sclk_edges + 1)]
                 with m.If((spi_sclk_edges >> 1) == status.nbits_minus_1 + 1):
                     assign_xvalue(m, spi_sclk_edges)
                     assign_xvalue(m, div_cycle)
+                    assign_xvalue(m, div_cycle_end)
+                    assign_xvalue(m, div_cycle_is0)
                     assign_xvalue(m, status)
                     m.d.sync += [self.busy.eq(0),
                                  spi_cs.eq(0),
@@ -111,5 +119,7 @@ class SPIController(Elaboratable):
         with m.Else():
             assign_xvalue(m, spi_sclk_edges)
             assign_xvalue(m, div_cycle)
+            assign_xvalue(m, div_cycle_end)
+            assign_xvalue(m, div_cycle_is0)
 
         return m
