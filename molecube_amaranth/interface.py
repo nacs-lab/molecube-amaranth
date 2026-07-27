@@ -1,7 +1,7 @@
 #
 
 from amaranth import *
-from amaranth_axi.axitools import axi_write_reg, AXISlaveReadIFace, AXISlaveWriteIFace
+from amaranth_axi.axitools import AXISlaveReadIFace, AXISlaveWriteIFace
 
 from transactron import TModule, Transaction
 from transactron.lib import PipelineBuilder
@@ -129,7 +129,8 @@ class ControlInterface(Elaboratable):
         m = TModule()
 
         m.submodules.write_iface = write_iface = AXISlaveWriteIFace(self.axi,
-                                                                    buffered=True)
+                                                                    buffered=True,
+                                                                    use_strb=False)
         m.submodules.read_iface = read_iface = AXISlaveReadIFace(self.axi,
                                                                  buffered=True)
 
@@ -212,8 +213,8 @@ class ControlInterface(Elaboratable):
 
         m.submodules.write_pipe = write_pipe = PipelineBuilder()
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
-                                                    ('data', self.data_width),
-                                                    ('strb', 4)], o=[])
+                                                    ('data', self.data_width)],
+                                                 o=[])
 
         @write_pipe.stage(m)
         def _(idx, data):
@@ -225,14 +226,14 @@ class ControlInterface(Elaboratable):
                                               blocks=data[1:11], first=data[0])
 
         @write_pipe.stage(m)
-        def _(idx, data, strb):
+        def _(idx, data):
             with m.Switch(idx):
                 with m.Case(0x00):
-                    axi_write_reg(m, wr_ttl_hi(0), data, strb)
+                    m.d.sync += wr_ttl_hi(0).eq(data)
                 with m.Case(0x01):
-                    axi_write_reg(m, wr_ttl_lo(0), data, strb)
+                    m.d.sync += wr_ttl_lo(0).eq(data)
                 with m.Case(0x03):
-                    axi_write_reg(m, wr_shadow.timing_ctrl, data, strb)
+                    m.d.sync += wr_shadow.timing_ctrl.eq(data)
                 with m.Case(0x04):
                     self.ioctrl.ttlout.set_byte_user(m, hi=data[:8], lo=data[8:16],
                                                      byte=data[16:21])
@@ -241,92 +242,92 @@ class ControlInterface(Elaboratable):
                                                     data[:8]))
 
                 with m.Case(0x10):
-                    axi_write_reg(m, wr_ttl_hi(1), data, strb)
+                    m.d.sync += wr_ttl_hi(1).eq(data)
                 with m.Case(0x11):
-                    axi_write_reg(m, wr_ttl_lo(1), data, strb)
+                    m.d.sync += wr_ttl_lo(1).eq(data)
                 with m.Case(0x12):
-                    axi_write_reg(m, wr_ttl_hi(2), data, strb)
+                    m.d.sync += wr_ttl_hi(2).eq(data)
                 with m.Case(0x13):
-                    axi_write_reg(m, wr_ttl_lo(2), data, strb)
+                    m.d.sync += wr_ttl_lo(2).eq(data)
                 with m.Case(0x14):
-                    axi_write_reg(m, wr_ttl_hi(3), data, strb)
+                    m.d.sync += wr_ttl_hi(3).eq(data)
                 with m.Case(0x15):
-                    axi_write_reg(m, wr_ttl_lo(3), data, strb)
+                    m.d.sync += wr_ttl_lo(3).eq(data)
                 with m.Case(0x16):
-                    axi_write_reg(m, wr_ttl_hi(4), data, strb)
+                    m.d.sync += wr_ttl_hi(4).eq(data)
                 with m.Case(0x17):
-                    axi_write_reg(m, wr_ttl_lo(4), data, strb)
+                    m.d.sync += wr_ttl_lo(4).eq(data)
                 with m.Case(0x18):
-                    axi_write_reg(m, wr_ttl_hi(5), data, strb)
+                    m.d.sync += wr_ttl_hi(5).eq(data)
                 with m.Case(0x19):
-                    axi_write_reg(m, wr_ttl_lo(5), data, strb)
+                    m.d.sync += wr_ttl_lo(5).eq(data)
                 with m.Case(0x1a):
-                    axi_write_reg(m, wr_ttl_hi(6), data, strb)
+                    m.d.sync += wr_ttl_hi(6).eq(data)
                 with m.Case(0x1b):
-                    axi_write_reg(m, wr_ttl_lo(6), data, strb)
+                    m.d.sync += wr_ttl_lo(6).eq(data)
                 with m.Case(0x1c):
-                    axi_write_reg(m, wr_ttl_hi(7), data, strb)
+                    m.d.sync += wr_ttl_hi(7).eq(data)
                 with m.Case(0x1d):
-                    axi_write_reg(m, wr_ttl_lo(7), data, strb)
+                    m.d.sync += wr_ttl_lo(7).eq(data)
                 with m.Case(0x1e):
-                    axi_write_reg(m, wr_shadow.loopback, data, strb)
+                    m.d.sync += wr_shadow.loopback.eq(data)
 
         @write_pipe.stage(m)
-        def _(idx, data, strb):
+        def _(idx, data):
             with m.Switch(idx):
                 with m.Case(0x48):
-                    axi_write_reg(m, wr_dma_ttl(0), data, strb)
+                    m.d.sync += wr_dma_ttl(0).eq(data)
                 with m.Case(0x49):
-                    axi_write_reg(m, wr_dma_ttl(1), data, strb)
+                    m.d.sync += wr_dma_ttl(1).eq(data)
                 with m.Case(0x4a):
-                    axi_write_reg(m, wr_dma_ttl(2), data, strb)
+                    m.d.sync += wr_dma_ttl(2).eq(data)
                 with m.Case(0x4b):
-                    axi_write_reg(m, wr_dma_ttl(3), data, strb)
+                    m.d.sync += wr_dma_ttl(3).eq(data)
                 with m.Case(0x4c):
-                    axi_write_reg(m, wr_dma_ttl(4), data, strb)
+                    m.d.sync += wr_dma_ttl(4).eq(data)
                 with m.Case(0x4d):
-                    axi_write_reg(m, wr_dma_ttl(5), data, strb)
+                    m.d.sync += wr_dma_ttl(5).eq(data)
                 with m.Case(0x4e):
-                    axi_write_reg(m, wr_dma_ttl(6), data, strb)
+                    m.d.sync += wr_dma_ttl(6).eq(data)
                 with m.Case(0x4f):
-                    axi_write_reg(m, wr_dma_ttl(7), data, strb)
+                    m.d.sync += wr_dma_ttl(7).eq(data)
 
                 with m.Case(0x50):
-                    axi_write_reg(m, wr_shadow.dds_timing1, data, strb)
+                    m.d.sync += wr_shadow.dds_timing1.eq(data)
                 with m.Case(0x51):
-                    axi_write_reg(m, wr_shadow.dds_timing2, data, strb)
+                    m.d.sync += wr_shadow.dds_timing2.eq(data)
                 with m.Case(0x52):
                     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
                 with m.Case(0x53):
                     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
                 with m.Case(0x59):
-                    axi_write_reg(m, wr_shadow.dma_ctrl, data, strb)
+                    m.d.sync += wr_shadow.dma_ctrl.eq(data)
 
         if self.valid_width != self.addr_width:
             m.submodules.prewrite_pipe = prewrite_pipe = PipelineBuilder()
             start_prewrite = prewrite_pipe.create_external(
                 i=[('idx', self.addr_width - 2), ('data', self.data_width),
-                   ('strb', 4), ('id', self.id_width), ('last', 1)], o=[])
+                   ('id', self.id_width), ('last', 1)], o=[])
 
             @prewrite_pipe.stage(m)
-            def _(idx, data, strb, id, last):
+            def _(idx, data, id, last):
                 idx_prefix = idx >> (self.valid_width - 2)
                 valid = Signal()
                 m.d.top_comb += valid.eq(idx_prefix == self.prefix)
                 with m.If(last):
                     write_iface.done(m, resp=Mux(valid, 0, 3), id=id)
                 with m.If(valid):
-                    start_write(m, idx=idx[:self.valid_width - 2], data=data, strb=strb)
+                    start_write(m, idx=idx[:self.valid_width - 2], data=data)
 
         with Transaction().body(m):
             req = write_iface.get(m)
             addr = req.addr
             if self.valid_width == self.addr_width:
-                start_write(m, idx=addr >> 2, data=req.data, strb=req.strb)
+                start_write(m, idx=addr >> 2, data=req.data)
                 with m.If(req.last):
                     write_iface.done(m, id=req.id)
             else:
-                start_prewrite(m, idx=addr >> 2, data=req.data, strb=req.strb,
+                start_prewrite(m, idx=addr >> 2, data=req.data,
                               id=req.id, last=req.last)
 
         m.submodules.read_pipe = read_pipe = PipelineBuilder()

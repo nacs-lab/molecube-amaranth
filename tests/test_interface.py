@@ -41,11 +41,6 @@ def reg_mask(idx, reg):
     else:
         return (1 << len(reg)) - 1
 
-def rand_strb(idx):
-    if idx == 0x5:
-        return 1
-    return random.randint(0, 0xf)
-
 class InterfaceWrapper(Elaboratable):
     def __init__(self, *, addr_prefix=0, addr_width=9, clock_shift=1):
         config = Config(CLOCK_SHIFT=clock_shift)
@@ -322,7 +317,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(5):
                 for idx, reg in iface.read_write_regs.items():
                     data = random.randint(0, 0xffff_ffff)
-                    strb = rand_strb(idx)
+                    strb = 0xf
                     assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                                strb=strb,
                                                                data=data)) is not None
@@ -361,7 +356,7 @@ class TestInterface(TestCaseWithSimulator):
             for _ in range(ncycles):
                 idx = random.choice(idxs)
                 data = random.randint(0, 0xffff_ffff)
-                strb = rand_strb(idx)
+                strb = 0xf
                 assert (await iface.write_request.call_try(sim, addr=idx * 4,
                                                            strb=strb,
                                                            data=data)) is not None
@@ -442,7 +437,7 @@ class TestInterface(TestCaseWithSimulator):
         async def producer(sim):
             if dma_enable:
                 assert (await iface.write_request.call_try(sim, addr=0x59 * 4,
-                                                           strb=1, data=1)) is not None
+                                                           strb=0xf, data=1)) is not None
                 for _ in range(8):
                     await sim.tick()
                 assert sim.get(iface.csr.dma_ctrl.enabled) == 1
@@ -598,7 +593,7 @@ class TestInterface(TestCaseWithSimulator):
                 assert (await iface.read_reply.call_try(sim)).resp == 0
 
                 assert (await iface.write_request.call_try(sim, addr=addr,
-                                                           strb=0, data=0)) is not None
+                                                           strb=0xf, data=0)) is not None
                 for _ in range(3):
                     await sim.tick()
                 assert (await iface.write_reply.call_try(sim)).resp == 0
@@ -632,7 +627,7 @@ class TestInterface(TestCaseWithSimulator):
                 assert (await iface.read_reply.call_try(sim)).resp == 3
 
                 assert (await iface.write_request.call_try(sim, addr=addr,
-                                                           strb=0, data=0)) is not None
+                                                           strb=0xf, data=0)) is not None
                 for _ in range(3):
                     await sim.tick()
                 assert (await iface.write_reply.call_try(sim)).resp == 3
