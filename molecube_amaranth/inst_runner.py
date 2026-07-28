@@ -301,6 +301,14 @@ class InstRunner(Elaboratable):
         with Transaction().body(m, ready=~pulses_finished):
             self.csr.dbg_inst_cycle.count(m)
 
+        loopback_result = Signal(32, reset_less=True)
+        write_result = Signal(1)
+        m.d.sync += loopback_result.eq(exe_inst.loopback)
+        with Transaction().body(m, ready=write_result):
+            self.csr.dbg_loopback_count.count(m)
+            self.fifos.result_fifo.write(m, loopback_result)
+            m.d.sync += write_result.eq(0)
+
         with m.Switch(state):
             with m.Case(RunState.FETCH):
                 fetch_inst = Transaction()
@@ -365,9 +373,7 @@ class InstRunner(Elaboratable):
                         m.d.sync += [underflow.eq(0),
                                      trigger_timeout.eq(0)]
                     with m.Case(InstOpCode.LOOPBACK):
-                        with Transaction().body(m):
-                            self.csr.dbg_loopback_count.count(m)
-                            self.fifos.result_fifo.write(m, exe_inst.loopback)
+                        m.d.sync += write_result.eq(1)
                     with m.Case(InstOpCode.CLOCKOUT):
                         with Transaction().body(m):
                             self.csr.dbg_clock_count.count(m)
