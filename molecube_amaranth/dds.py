@@ -170,11 +170,10 @@ class DDSController(Elaboratable):
         wr_cache_addr = Signal(6 + 4, reset_less=True)
         wr_cache_data = Signal(16, reset_less=True)
 
-        reg_chain(m, input=wr_cache_en,
-                  output=wr_cache.en, levels=2)
-        reg_chain(m, input=Cat(wr_cache_addr, wr_cache_data),
-                  output=Cat(wr_cache.addr, wr_cache.data), levels=2,
-                  reset_mid=False)
+        reg_chain(m, input=wr_cache_en, output=wr_cache.en, levels=2)
+        wr_cache_ad, _ = reg_chain(m, input=Cat(wr_cache_addr, wr_cache_data),
+                                   levels=2, reset_mid=False, reset_output=False)
+        m.d.comb += Cat(wr_cache.addr, wr_cache.data).eq(wr_cache_ad)
 
         m.d.sync += wr_cache_en.eq(0)
         assign_xvalue(m, wr_cache_addr)
