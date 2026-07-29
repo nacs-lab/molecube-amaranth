@@ -132,7 +132,7 @@ class BufferedFifo(wiring.Component):
         m.submodules.out_adaptor = out_adaptor = OutAdaptor.from_signal(
             ready=fifo.w_rdy, valid=fifo.w_en, data=View(layout, fifo.w_data))
 
-        @def_method(m, self.read)
+        @def_method(m, self.read, ready=in_adaptor.input.ready)
         def _():
             return in_adaptor.input(m)
 
@@ -232,10 +232,11 @@ class ResultFifo(Elaboratable):
 
         @def_method(m, self.read)
         def _():
-            read_trans = Transaction()
-            with read_trans.body(m):
+            with Transaction().body(m):
                 res = fifo.read(m).data
-            return Mux(read_trans.run, res, 0)
+            # This assumes that fifo.read.ready
+            # fully reflects whether the method can run
+            return Mux(fifo.read.ready, res, 0)
 
         @def_method(m, self.write, combiner=oring_combiner, nonexclusive=True)
         def _(data):
