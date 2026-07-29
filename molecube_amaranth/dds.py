@@ -136,8 +136,8 @@ class DDSController(Elaboratable):
         dds_wr = Signal(1)
         dds_fud = Signal(1)
         dds_cs = Signal(11)
-        dds_id = Signal(4)
-        dds_need_fud = Signal(1)
+        dds_id = Signal(4, reset_less=True)
+        dds_need_fud = Signal(reset_less=True)
 
         dds_addr = Signal(6)
         dds_data_oe = Signal(1, init=1) # output by default
@@ -158,15 +158,15 @@ class DDSController(Elaboratable):
         hold_cnt = Signal(5, reset_less=True)
         hold_end = Signal(reset_less=True)
 
-        dds_next_addr = Signal(6)
-        dds_next_data = Signal(16)
+        dds_next_addr = Signal(6, reset_less=True)
+        dds_next_data = Signal(16, reset_less=True)
 
         m.submodules.regs_cache = regs_cache = Memory(shape=unsigned(16),
                                                       depth=11 << 6, init=[])
 
         wr_cache = regs_cache.write_port()
 
-        wr_cache_en = Signal()
+        wr_cache_en = Signal(reset_less=True)
         wr_cache_addr = Signal(6 + 4, reset_less=True)
         wr_cache_data = Signal(16, reset_less=True)
 
@@ -185,11 +185,13 @@ class DDSController(Elaboratable):
                          wr_cache_data.eq(data)]
 
         rd_cache = regs_cache.read_port()
-        m.d.comb += rd_cache.en.eq(1)
+        rd_cache_addr = Signal.like(rd_cache.addr, reset_less=True)
+        m.d.comb += [rd_cache.en.eq(1),
+                     rd_cache.addr.eq(rd_cache_addr)]
         m.d.sync += dds_reg_out.eq(rd_cache.data)
         @def_method(m, self.read_dds_cache, singlecaller=True)
         def _(id, addr):
-            m.d.sync += rd_cache.addr.eq(Cat(addr, id))
+            m.d.sync += rd_cache_addr.eq(Cat(addr, id))
 
         ## DDS parallel write sequence:
         # 1. setup address and data
