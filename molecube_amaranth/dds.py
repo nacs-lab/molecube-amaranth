@@ -222,8 +222,12 @@ class DDSController(Elaboratable):
         # For multiple read we may or may not need to deassert and reassert read enable
 
         final_result = Signal(32, reset_less=True)
-        write_result = Signal(1)
-        assign_xvalue(m, final_result)
+        write_result = Signal()
+        m.d.sync += [final_result.eq(Cat(dds_data_in, dds_next_data)),
+                     write_result.eq(0)]
+
+        with Transaction().body(m, ready=write_result):
+            self.result_fifo.write(m, final_result)
 
         with m.If(~hold_end):
             m.d.sync += [hold_cnt.eq(hold_cnt - 1),
@@ -382,8 +386,7 @@ class DDSController(Elaboratable):
                                  hold_end.eq(self.csr.dds_read_rdhoz_iszero),
                                  dds_rd.eq(0),
                                  dds_addr.eq(0),
-                                 write_result.eq(1),
-                                 final_result.eq(Cat(dds_data_in, dds_next_data))]
+                                 write_result.eq(1)]
                     do_cache(dds_data_in)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)
@@ -424,9 +427,5 @@ class DDSController(Elaboratable):
                          dds_next_addr.eq(arg.addr2),
                          dds_next_data.eq(arg.data2),
                          dds_data_oe.eq(~arg.read)]
-
-        with Transaction().body(m, ready=write_result):
-            self.result_fifo.write(m, final_result)
-            m.d.sync += write_result.eq(0)
 
         return m

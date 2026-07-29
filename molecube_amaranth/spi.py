@@ -61,8 +61,12 @@ class SPIController(Elaboratable):
                          spi_sclk.eq(arg.clk_pol)]
 
         final_result = Signal(32, reset_less=True)
-        write_result = Signal(1)
-        assign_xvalue(m, final_result)
+        write_result = Signal()
+        m.d.sync += [write_result.eq(0),
+                     final_result.eq(result_data)]
+
+        with Transaction().body(m, ready=write_result):
+            self.result_fifo.write(m, final_result)
 
         falling_output = Signal(1, reset_less=True)
         m.d.sync += falling_output.eq(status.clk_pha^status.clk_pol)
@@ -101,16 +105,11 @@ class SPIController(Elaboratable):
                                  spi_sclk.eq(1),
                                  status.data[31].eq(0)]
                     with m.If(status.result):
-                        m.d.sync += [write_result.eq(1),
-                                     final_result.eq(result_data)]
+                        m.d.sync += write_result.eq(1)
                 with m.Else():
                     m.d.sync += spi_sclk.eq(~spi_sclk)
         with m.Else():
             assign_xvalue(m, spi_sclk_edges)
             assign_xvalue(m, div_cycle)
-
-        with Transaction().body(m, ready=write_result):
-            self.result_fifo.write(m, final_result)
-            m.d.sync += write_result.eq(0)
 
         return m
