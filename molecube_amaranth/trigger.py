@@ -28,11 +28,11 @@ class TriggerController(Elaboratable):
 
         trig_chn = Signal(range(len(ttlin)), reset_less=True)
         trig_edge = Signal(reset_less=True)
-        trig_ttl = Signal()
+        trig_ttl = Signal(reset_less=True)
         m.d.sync += trig_ttl.eq(ttlin.bit_select(trig_chn, 1) ^ trig_edge)
 
-        wait_cycle = Signal(self.timer_width)
-        wait_end = Signal()
+        wait_cycle = Signal(self.timer_width, reset_less=True)
+        wait_end = Signal(reset_less=True)
         m.d.sync += [wait_end.eq(wait_cycle[1:] == 0),
                      wait_cycle.eq(wait_cycle - 1)]
 
@@ -40,7 +40,7 @@ class TriggerController(Elaboratable):
         trig_starting = Signal()
         m.d.sync += trig_starting.eq(0)
 
-        timedout = Signal(init=1)
+        timedout = Signal(reset_less=True)
         trig_firing = Signal()
         assign_xvalue(m, timedout)
         m.d.sync += trig_firing.eq(0)
