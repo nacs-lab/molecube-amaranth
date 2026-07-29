@@ -505,7 +505,7 @@ class TestInterface(TestCaseWithSimulator):
             assert sim.get(iface.csr.dbg_result_generated.value) == 0
             assert sim.get(iface.csr.dbg_result_consumed.value) == n1
 
-            n2 = 100
+            n2 = 30
             results = []
             for _ in range(n2):
                 data = random.randint(0, 0xffff_ffff)

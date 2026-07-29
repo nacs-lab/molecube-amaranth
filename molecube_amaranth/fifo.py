@@ -281,7 +281,7 @@ class Fifos(Elaboratable):
         self.spi_cmd_fifo = BufferedFifo(SPI_ARG, 7)
         self.dds0_cmd_fifo = BufferedFifo(DDS_SET_ARG, 35)
         self.dds1_cmd_fifo = BufferedFifo(DDS_SET_ARG, 35)
-        self.result_fifo = ResultFifo(data_width, 515)
+        self.result_fifo = ResultFifo(data_width, 35)
         self.dma_cmd_fifo = DMACmdFifo(addr_width=dma_addr_width,
                                        align_width=dma_align_width)
 
