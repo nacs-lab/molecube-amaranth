@@ -488,6 +488,7 @@ class DMAInstRunner(Elaboratable):
         output_action = Signal(self.OutputAction, reset_less=True)
         counter = Signal(28, reset_less=True)
         output_en = Signal()
+        m.d.sync += output_en.eq(0)
         with Transaction().body(m, ready=output_en):
             with m.If(output_action.clockout_en):
                 self.ioctrl.clockout.set(m, output_action.clockout.period)
@@ -509,14 +510,14 @@ class DMAInstRunner(Elaboratable):
                                     result=0, id=dac.id, clk_pha=dac.clk_pha,
                                     clk_pol=dac.clk_pol)
 
+
         with m.Switch(state):
             with m.Case(State.FETCH):
                 assign_xvalue(m, counter)
                 fetch_trans = Transaction()
                 with fetch_trans.body(m):
                     req = inst_conn.read(m)
-                    m.d.sync += [output_action.eq(req.action),
-                                 output_en.eq(1)]
+                    m.d.sync += output_en.eq(1)
                     wait = req.wait.wait
                     with m.If(idling):
                         self.dmactrl.inst_started(m)
@@ -530,27 +531,23 @@ class DMAInstRunner(Elaboratable):
                         m.d.sync += [counter.eq(wait.cycle - 1),
                                      state.eq(State.WAIT)]
                 with m.If(~fetch_trans.run):
-                    m.d.sync += [idling.eq(1),
-                                 output_en.eq(0)]
-                    assign_xvalue(m, output_action)
+                    m.d.sync += idling.eq(1)
                     with Transaction().body(m, ready=~idling):
                         self.dmactrl.inst_stopped(m)
 
             with m.Case(State.WAIT):
-                assign_xvalue(m, output_action)
                 m.d.sync += [counter.eq(counter - 1),
-                             output_en.eq(0),
                              self.long_wait.eq(counter[7:] != 0)] # > 128 cycles
                 with m.If(counter == 0):
                     m.d.sync += state.eq(State.FETCH)
 
             with m.Case(State.TRIG):
-                m.d.sync += output_en.eq(0)
-                assign_xvalue(m, output_action)
                 assign_xvalue(m, counter)
                 with Transaction().body(m):
                     with m.If(self.ioctrl.trigger.wait(m).timeout):
                         self.dmactrl.trig_timeout(m)
                     m.d.sync += state.eq(State.FETCH)
+
+        m.d.sync += output_action.eq(req.action)
 
         return m
