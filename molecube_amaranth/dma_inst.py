@@ -510,6 +510,13 @@ class DMAInstRunner(Elaboratable):
                                     result=0, id=dac.id, clk_pha=dac.clk_pha,
                                     clk_pol=dac.clk_pol)
 
+        trig_action = Signal(WaitTrigDecode, reset_less=True)
+        trig_en = Signal()
+        m.d.sync += trig_en.eq(0)
+        with Transaction().body(m, ready=trig_en):
+            self.ioctrl.trigger.setup(m, chn=trig_action.chn,
+                                      edge=trig_action.edge,
+                                      cycle=trig_action.cycle)
 
         with m.Switch(state):
             with m.Case(State.FETCH):
@@ -522,11 +529,8 @@ class DMAInstRunner(Elaboratable):
                     with m.If(idling):
                         self.dmactrl.inst_started(m)
                     with m.If(req.is_trig):
-                        wait_trig = req.wait.wait_trig
-                        self.ioctrl.trigger.setup(m, chn=wait_trig.chn,
-                                                  edge=wait_trig.edge,
-                                                  cycle=wait_trig.cycle)
-                        m.d.sync += state.eq(State.TRIG)
+                        m.d.sync += [state.eq(State.TRIG),
+                                     trig_en.eq(1)]
                     with m.Elif(~wait.is0):
                         m.d.sync += [counter.eq(wait.cycle - 1),
                                      state.eq(State.WAIT)]
@@ -548,6 +552,7 @@ class DMAInstRunner(Elaboratable):
                         self.dmactrl.trig_timeout(m)
                     m.d.sync += state.eq(State.FETCH)
 
-        m.d.sync += output_action.eq(req.action)
+        m.d.sync += [output_action.eq(req.action),
+                     trig_action.eq(req.wait.wait_trig)]
 
         return m

@@ -999,7 +999,7 @@ class TestRunner(TestCaseWithSimulator):
             for cmd in state.checker_queue:
                 wait_trig = await state.run_checker_action(cmd, sim, circ)
                 assert wait_trig is not None
-                for _ in range(wait_trig['cycle'] + 3):
+                for _ in range(wait_trig['cycle'] + 4):
                     await sim.tick()
 
         async def runstate_check(sim):
@@ -1010,7 +1010,7 @@ class TestRunner(TestCaseWithSimulator):
             for cmd in state.checker_queue:
                 status = 9 << 8 if isfirst else 13 << 8
                 isfirst = False
-                for _ in range(cmd['wait_trig']['cycle'] + 2):
+                for _ in range(cmd['wait_trig']['cycle'] + 3):
                     assert sim.get(Signal.cast(circ.csr.dma_status)) == status
                     await sim.tick()
                 assert sim.get(Signal.cast(circ.csr.dma_status)) == 13 << 8
