@@ -186,19 +186,10 @@ class DDSController(Elaboratable):
 
         rd_cache = regs_cache.read_port()
         m.d.comb += rd_cache.en.eq(1)
-
-        rd_cache_en = Signal()
-        rd_cache_valid = Signal()
-        m.d.sync += [rd_cache_valid.eq(rd_cache_en),
-                     rd_cache_en.eq(0)]
-        with m.If(rd_cache_valid):
-            m.d.sync += dds_reg_out.eq(rd_cache.data)
-        assign_xvalue(m, rd_cache.addr)
-
+        m.d.sync += dds_reg_out.eq(rd_cache.data)
         @def_method(m, self.read_dds_cache, singlecaller=True)
         def _(id, addr):
-            m.d.sync += [rd_cache_en.eq(1),
-                         rd_cache.addr.eq(Cat(addr, id))]
+            m.d.sync += rd_cache.addr.eq(Cat(addr, id))
 
         ## DDS parallel write sequence:
         # 1. setup address and data
