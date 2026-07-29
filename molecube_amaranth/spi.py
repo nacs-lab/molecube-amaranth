@@ -73,53 +73,47 @@ class SPIController(Elaboratable):
         falling_output = Signal(1, reset_less=True)
         m.d.sync += falling_output.eq(status.clk_pha^status.clk_pol)
 
-        with m.If(self.busy):
-            with m.If(spi_cs == 0):
-                # Setup
-                m.d.sync += [spi_cs.eq(1 << status.id),
-                             spi_sclk_edges.eq(0),
-                             div_cycle.eq(status.div),
-                             div_cycle_is0.eq(status.div == 0),
-                             div_cycle_end.eq(status.div == 0),
-                             result_data.eq(0)]
-            with m.Elif(~div_cycle_end):
-                m.d.sync += [div_cycle.eq(div_cycle - 1),
-                             div_cycle_end.eq(div_cycle[1:] == 0)]
-            with m.Else():
-                # spi_sclk = 0 means this is a rising edge
-                # spi_sclk = 1 means this is a falling edge
-                # falling_output == 0 means data is valid on rising clock edges
-                # falling_output == 1 means data is valid on falling clock edges
-                # Update spi_mosi.  Data is valid on next clock edge.
-                with m.If(spi_sclk != falling_output):
-                    with m.If(spi_sclk_edges != 0):
-                        m.d.sync += status.data.eq(status.data << 1)
-                with m.Else():
-                    # read in data when it is valid
-                    if spiio is not None:
-                        m.d.sync += result_data.eq((result_data << 1) | spiio.miso.i)
-
-                m.d.sync += [div_cycle.eq(status.div),
-                             div_cycle_end.eq(div_cycle_is0),
-                             spi_sclk_edges.eq(spi_sclk_edges + 1)]
-                with m.If((spi_sclk_edges >> 1) == status.nbits_minus_1 + 1):
-                    assign_xvalue(m, spi_sclk_edges)
-                    assign_xvalue(m, div_cycle)
-                    assign_xvalue(m, div_cycle_end)
-                    assign_xvalue(m, div_cycle_is0)
-                    assign_xvalue(m, status)
-                    m.d.sync += [self.busy.eq(0),
-                                 spi_cs.eq(0),
-                                 spi_sclk.eq(1),
-                                 status.data[31].eq(0)]
-                    with m.If(status.result):
-                        m.d.sync += write_result.eq(1)
-                with m.Else():
-                    m.d.sync += spi_sclk.eq(~spi_sclk)
+        with m.If(spi_cs == 0):
+            # Setup
+            m.d.sync += [spi_sclk_edges.eq(0),
+                         div_cycle.eq(status.div),
+                         div_cycle_is0.eq(status.div == 0),
+                         div_cycle_end.eq(status.div == 0),
+                         result_data.eq(0)]
+            with m.If(self.busy):
+                m.d.sync += spi_cs.eq(1 << status.id)
+        with m.Elif(~div_cycle_end):
+            m.d.sync += [div_cycle.eq(div_cycle - 1),
+                         div_cycle_end.eq(div_cycle[1:] == 0)]
         with m.Else():
-            assign_xvalue(m, spi_sclk_edges)
-            assign_xvalue(m, div_cycle)
-            assign_xvalue(m, div_cycle_end)
-            assign_xvalue(m, div_cycle_is0)
+            # spi_sclk = 0 means this is a rising edge
+            # spi_sclk = 1 means this is a falling edge
+            # falling_output == 0 means data is valid on rising clock edges
+            # falling_output == 1 means data is valid on falling clock edges
+            # Update spi_mosi.  Data is valid on next clock edge.
+            with m.If(spi_sclk != falling_output):
+                with m.If((spi_sclk_edges != 0) & self.busy):
+                    m.d.sync += status.data.eq(status.data << 1)
+            with m.Else():
+                # read in data when it is valid
+                if spiio is not None:
+                    m.d.sync += result_data.eq((result_data << 1) | spiio.miso.i)
+
+            m.d.sync += [div_cycle.eq(status.div),
+                         div_cycle_end.eq(div_cycle_is0),
+                         spi_sclk_edges.eq(spi_sclk_edges + 1)]
+            with m.If((spi_sclk_edges >> 1) == status.nbits_minus_1 + 1):
+                assign_xvalue(m, spi_sclk_edges)
+                assign_xvalue(m, div_cycle)
+                assign_xvalue(m, div_cycle_end)
+                assign_xvalue(m, div_cycle_is0)
+                assign_xvalue(m, status)
+                m.d.sync += [self.busy.eq(0),
+                             spi_cs.eq(0),
+                             spi_sclk.eq(1),
+                             status.data[31].eq(0),
+                             write_result.eq(status.result & self.busy)]
+            with m.Elif(self.busy):
+                m.d.sync += spi_sclk.eq(~spi_sclk)
 
         return m
