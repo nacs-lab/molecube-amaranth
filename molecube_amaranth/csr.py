@@ -113,7 +113,7 @@ class Registers(Elaboratable):
             r.attrs["molecube.vivado.false_path_from"] = "TRUE"
             r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
 
-        self.dbg_result_count = Signal(self.REG_WIDTH)
+        self.dbg_result_count = Signal(6)
 
         self.all_counters = dict(
             dbg_inst_word_count=Counter(self.REG_WIDTH),

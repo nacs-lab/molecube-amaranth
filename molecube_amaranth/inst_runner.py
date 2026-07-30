@@ -149,6 +149,7 @@ class InstRunner(Elaboratable):
         # delay underflow/trigger_timeout/pulses_finished flag by one cycle to match
         # output timing
         timing_status = View(TIME_STATUS_STRUCT, Signal(32, init=0x4))
+        assert len(self.csr.dbg_result_count) == len(self.fifos.result_fifo.level)
         m.d.sync += [self.csr.timing_status.eq(timing_status.as_value()),
                      self.csr.dbg_result_count.eq(self.fifos.result_fifo.level),
                      timing_status.underflow.eq(underflow),
