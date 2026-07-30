@@ -299,7 +299,6 @@ class InstRunner(Elaboratable):
 
         exe_inst = Signal(DECODED_INST, reset_less=True)
         exe_trig_enable = Signal(reset_less=True)
-        assign_xvalue(m, exe_inst)
         assign_xvalue(m, exe_trig_enable)
 
         with Transaction().body(m, ready=~pulses_finished):
@@ -355,7 +354,6 @@ class InstRunner(Elaboratable):
                 fetch_inst = Transaction()
                 with fetch_inst.body(m):
                     new_inst = read_decoded(m)
-                    m.d.sync += exe_inst.eq(new_inst)
                     m.d.sync += [check_timing.eq(new_inst.time_check),
                                  pulses_finished.eq(0)]
                     trig_type = new_inst.wait.trig_type
@@ -429,6 +427,8 @@ class InstRunner(Elaboratable):
                 with m.Elif(wait_end):
                     m.d.sync += [state.eq(RunState.FETCH),
                                  trigger_timeout.eq(1)]
+
+        m.d.sync += exe_inst.eq(new_inst)
 
         with Transaction().body(m, ready=pulse_init):
             ioctrl.clockout.set(m, ioctrl.clockout.OFF)
