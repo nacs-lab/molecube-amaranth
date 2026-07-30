@@ -163,6 +163,8 @@ class InterfaceWrapper(Elaboratable):
                 val = reg
             else:
                 val = random.randint(0, (1 << len(reg)) - 1)
+                if idx == 0x2: # Missing bit in timing_status
+                    val = val & ~0x8
                 sim.set(reg, val)
             vals[idx] = val
         return vals

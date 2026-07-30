@@ -120,10 +120,14 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=t2, bank=1))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -165,9 +169,13 @@ class TestInstRunner(TestCaseWithSimulator):
         ttl_hi = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -212,11 +220,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t3 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=t2, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl3, t=t3, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -263,11 +275,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t3 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=0, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl3, t=t3, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -311,10 +327,14 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(1000, 2000)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.wait(t=t1))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -351,12 +371,16 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(60, 200)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t1))
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div2))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -397,12 +421,16 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(550, 600)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t1))
             await circ.write_cmd(sim, *InstBuilder.clockout(div=255))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -442,10 +470,14 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = random.randint(60, 500)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.clockout(div=div1))
             await circ.write_cmd(sim, *InstBuilder.wait(t=t1 + 200))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -487,10 +519,14 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.loopback(data=data1))
             await circ.write_cmd(sim, *InstBuilder.loopback(data=data2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) & 7 == 0x4
@@ -541,11 +577,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0,
                                                        timecheck=True))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=t2, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -587,6 +627,8 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0,
                                                        timecheck=True))
             await sim.tick()
@@ -594,6 +636,8 @@ class TestInstRunner(TestCaseWithSimulator):
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=t2, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -649,6 +693,8 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = 1
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0,
                                                        timecheck=True))
             await sim.tick()
@@ -656,6 +702,8 @@ class TestInstRunner(TestCaseWithSimulator):
             await circ.write_cmd(sim, *InstBuilder.clear_error())
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -700,11 +748,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = random.randint(20, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.wait(t=t0, trig_chn=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
             await circ.write_cmd(sim, *InstBuilder.clear_error())
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -753,10 +805,14 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = random.randint(20, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.wait(t=t0, trig_chn=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -814,11 +870,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = random.randint(20, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.wait(t=t0, trig_chn=0,
                                                         trig_raise=trig_raise))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             sim.set(circ.pulseio.ttlin_port.i, trig_raise)
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
@@ -867,11 +927,15 @@ class TestInstRunner(TestCaseWithSimulator):
         t1 = random.randint(20, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.wait(t=t0, trig_chn=0,
                                                         trig_raise=trig_raise))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             sim.set(circ.pulseio.ttlin_port.i, not trig_raise)
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
@@ -924,10 +988,14 @@ class TestInstRunner(TestCaseWithSimulator):
         t2 = random.randint(10, 100)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl1, t=t1, bank=0))
             await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl2, t=t2, bank=1))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             # Set hold
             sim.set(circ.csr.timing_ctrl, 1)
             for _ in range(100):
@@ -975,10 +1043,14 @@ class TestInstRunner(TestCaseWithSimulator):
         ts = [random.randint(1, 2) for _ in range(fifo_depth * 2)]
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             for (ttl, t) in zip(ttls, ts):
                 await circ.write_cmd(sim, *InstBuilder.ttl(ttl=ttl, t=t, bank=0))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             # Set hold
             sim.set(circ.csr.timing_ctrl, 1)
             for _ in range((fifo_depth + 2) * 2 + 2): # 2 cycles per write
@@ -1032,10 +1104,14 @@ class TestInstRunner(TestCaseWithSimulator):
         freq2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_set_freq(id=id1, freq=freq1))
             await circ.write_cmd(sim, *InstBuilder.dds_set_freq(id=id2, freq=freq2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1079,12 +1155,16 @@ class TestInstRunner(TestCaseWithSimulator):
         phase2 = random.randint(0, 0xffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_set_amp_phase(id=id1, amp=amp1,
                                                                      phase=phase1))
             await circ.write_cmd(sim, *InstBuilder.dds_set_amp_phase(id=id2, amp=amp2,
                                                                      phase=phase2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1128,12 +1208,16 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_set_two_bytes(id=id1, addr=addr1,
                                                                      data=data1))
             await circ.write_cmd(sim, *InstBuilder.dds_set_two_bytes(id=id2, addr=addr2,
                                                                      data=data2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1177,12 +1261,16 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_set_four_bytes(id=id1, addr=addr1,
                                                                       data=data1))
             await circ.write_cmd(sim, *InstBuilder.dds_set_four_bytes(id=id2, addr=addr2,
                                                                       data=data2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1222,10 +1310,14 @@ class TestInstRunner(TestCaseWithSimulator):
         id2 = random.randint(11, 21)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_reset(id=id1))
             await circ.write_cmd(sim, *InstBuilder.dds_reset(id=id2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1269,10 +1361,14 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_get_two_bytes(id=id1, addr=addr1))
             await circ.write_cmd(sim, *InstBuilder.dds_get_two_bytes(id=id2, addr=addr2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1330,10 +1426,14 @@ class TestInstRunner(TestCaseWithSimulator):
         data2 = random.randint(0, 0xffff_ffff)
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.dds_get_four_bytes(id=id1, addr=addr1))
             await circ.write_cmd(sim, *InstBuilder.dds_get_four_bytes(id=id2, addr=addr2))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -1402,6 +1502,8 @@ class TestInstRunner(TestCaseWithSimulator):
         div4 = 1
 
         async def producer(sim):
+            for _ in range(3):
+                await sim.tick()
             await circ.write_cmd(sim, *InstBuilder.spi(id=id, div=div1, pha=0, pol=0,
                                                        data=data1,
                                                        save_result=save_result))
@@ -1416,6 +1518,8 @@ class TestInstRunner(TestCaseWithSimulator):
                                                        save_result=save_result))
 
         async def consumer(sim):
+            for _ in range(3):
+                await sim.tick()
             for _ in range(FIFO_LATENCY + 2): # 2 cycles to write the command
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4

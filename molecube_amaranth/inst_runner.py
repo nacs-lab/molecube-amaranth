@@ -90,12 +90,6 @@ INST_STRUCT = FlexibleLayout(63, dict(
     time_check=Field(unsigned(1), 59),
     opcode=Field(InstOpCode, 60),
 ))
-TIME_STATUS_STRUCT = FlexibleLayout(32, dict(
-    underflow=Field(unsigned(1), 0),
-    trigger_timeout=Field(unsigned(1), 1),
-    pulses_finished=Field(unsigned(1), 2),
-    results=Field(unsigned(5), 4),
-))
 
 class RunState(enum.Enum):
     FETCH = 0
@@ -146,16 +140,19 @@ class InstRunner(Elaboratable):
         underflow = Signal(1)
         trigger_timeout = Signal(1)
         pulses_finished = Signal(1, init=1)
+
         # delay underflow/trigger_timeout/pulses_finished flag by one cycle to match
         # output timing
-        timing_status = View(TIME_STATUS_STRUCT, Signal(32, init=0x4))
+        timing_status1 = Signal.like(self.csr.timing_status1, reset_less=True)
+        timing_status2 = Signal.like(self.csr.timing_status2, reset_less=True)
         assert len(self.csr.dbg_result_count) == len(self.fifos.result_fifo.level)
-        m.d.sync += [self.csr.timing_status.eq(timing_status.as_value()),
+        m.d.sync += [self.csr.timing_status1.eq(timing_status1),
+                     self.csr.timing_status2.eq(timing_status2),
                      self.csr.dbg_result_count.eq(self.fifos.result_fifo.level),
-                     timing_status.underflow.eq(underflow),
-                     timing_status.trigger_timeout.eq(trigger_timeout),
-                     timing_status.pulses_finished.eq(pulses_finished),
-                     timing_status.results.eq(self.fifos.result_fifo.user_level)]
+                     timing_status1.underflow.eq(underflow),
+                     timing_status1.trigger_timeout.eq(trigger_timeout),
+                     timing_status1.pulses_finished.eq(pulses_finished),
+                     timing_status2.results.eq(self.fifos.result_fifo.user_level)]
 
         # Control
         pulse_hold = self.csr.timing_ctrl[0]

@@ -60,6 +60,14 @@ class DMAStatus(Struct):
 class DMACtrl(Struct):
     enabled: 1
 
+class TimeStatus1(Struct):
+    underflow: 1
+    trigger_timeout: 1
+    pulses_finished: 1
+
+class TimeStatus2(Struct):
+    results: 5
+
 class Registers(Elaboratable):
     REG_WIDTH = 32
     CLKDIV_WIDTH = 8
@@ -75,7 +83,8 @@ class Registers(Elaboratable):
 
         self.ttl_in = Signal(nttl_in)
 
-        self.timing_status = Signal(self.REG_WIDTH)
+        self.timing_status1 = Signal(TimeStatus1, reset_less=True)
+        self.timing_status2 = Signal(TimeStatus2, reset_less=True)
         self.timing_ctrl = Signal(2)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
         self.loopback = Signal(self.REG_WIDTH)
@@ -151,6 +160,12 @@ class Registers(Elaboratable):
                    cast_to_width(self.dds_read_rdl, 6),
                    cast_to_width(self.dds_read_rdhoz, 6),
                    cast_to_width(self.dds_reset_rshd, 6))
+
+    @property
+    def timing_status(self):
+        return Cat(Signal.cast(self.timing_status1),
+                   Signal(),
+                   Signal.cast(self.timing_status2))
 
     def elaborate(self, m):
         m = TModule()
