@@ -453,7 +453,7 @@ class TestInstRunner(TestCaseWithSimulator):
             for _ in range((t1 + 5) << circ.clock_shift):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x0
-            sim.set(circ.csr.timing_ctrl, 1 << 8)
+            sim.set(circ.csr.timing_ctrl, 1 << 1)
             await sim.tick()
             circ.clockout_set(255)
             assert sim.get(circ.csr.timing_status) == 0x0
@@ -624,7 +624,7 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
             # Set init, which should clear the underflow flag
-            sim.set(circ.csr.timing_ctrl, 1 << 8)
+            sim.set(circ.csr.timing_ctrl, 1 << 1)
             await sim.tick()
             assert sim.get(circ.csr.timing_status) == 0x5
             await sim.tick()
@@ -787,7 +787,7 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t0 + t1) << circ.clock_shift)
 
             # Set init, which should clear the timeout flag
-            sim.set(circ.csr.timing_ctrl, 1 << 8)
+            sim.set(circ.csr.timing_ctrl, 1 << 1)
             await sim.tick()
             assert sim.get(circ.csr.timing_status) == 0x6
             await sim.tick()
@@ -929,7 +929,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
         async def consumer(sim):
             # Set hold
-            sim.set(circ.csr.timing_ctrl, 1 << 7)
+            sim.set(circ.csr.timing_ctrl, 1)
             for _ in range(100):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -980,7 +980,7 @@ class TestInstRunner(TestCaseWithSimulator):
 
         async def consumer(sim):
             # Set hold
-            sim.set(circ.csr.timing_ctrl, 1 << 7)
+            sim.set(circ.csr.timing_ctrl, 1)
             for _ in range((fifo_depth + 2) * 2 + 2): # 2 cycles per write
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
@@ -999,7 +999,7 @@ class TestInstRunner(TestCaseWithSimulator):
             for _ in range(20):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
-            assert sim.get(circ.csr.timing_ctrl) == 1 << 7
+            assert sim.get(circ.csr.timing_ctrl) == 1
             # Release hold
             sim.set(circ.csr.timing_ctrl, 0)
             for _ in range(20):

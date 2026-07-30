@@ -38,6 +38,9 @@ def reg_mask(idx, reg):
     elif idx == 0x51:
         # dds timing 2
         return 0x007df7df
+    elif idx == 0x3:
+        # timing_ctrl
+        return 0x3 << 7
     else:
         return (1 << len(reg)) - 1
 
@@ -108,7 +111,7 @@ class InterfaceWrapper(Elaboratable):
         self.read_write_regs = {
             0x00: self.ttl_hi_reg(0),
             0x01: self.ttl_lo_reg(0),
-            0x03: self.csr.timing_ctrl,
+            0x03: Cat(Signal(7), self.csr.timing_ctrl),
             0x05: self.csr.clockout_div,
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),

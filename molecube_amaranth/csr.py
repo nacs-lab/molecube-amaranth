@@ -76,7 +76,7 @@ class Registers(Elaboratable):
         self.ttl_in = Signal(nttl_in)
 
         self.timing_status = Signal(self.REG_WIDTH)
-        self.timing_ctrl = Signal(self.REG_WIDTH)
+        self.timing_ctrl = Signal(2)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
         self.loopback = Signal(self.REG_WIDTH)
         self.dds0_reg = Signal(self.REG_WIDTH, reset_less=True)

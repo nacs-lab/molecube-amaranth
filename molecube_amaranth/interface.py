@@ -233,7 +233,7 @@ class ControlInterface(Elaboratable):
                 with m.Case(0x01):
                     m.d.sync += wr_ttl_lo(0).eq(data)
                 with m.Case(0x03):
-                    m.d.sync += wr_shadow.timing_ctrl.eq(data)
+                    m.d.sync += wr_shadow.timing_ctrl.eq(data >> 7)
                 with m.Case(0x04):
                     self.ioctrl.ttlout.set_byte_user(m, hi=data[:8], lo=data[8:16],
                                                      byte=data[16:21])
@@ -362,7 +362,7 @@ class ControlInterface(Elaboratable):
         read_states.add_leaf(0x00, rd_ttl_hi(0))
         read_states.add_leaf(0x01, rd_ttl_lo(0))
         read_states.add_leaf(0x02, rd_shadow.timing_status)
-        read_states.add_leaf(0x03, rd_shadow.timing_ctrl)
+        read_states.add_leaf(0x03, rd_shadow.timing_ctrl << 7)
         read_states.add_leaf(0x04, ttl_out_reg(0))
         read_states.add_leaf(0x05, rd_shadow.clockout_div)
         read_states.add_leaf(0x06, MAJOR_VERSION)

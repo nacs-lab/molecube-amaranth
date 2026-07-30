@@ -157,8 +157,8 @@ class InstRunner(Elaboratable):
                      timing_status.results.eq(self.fifos.result_fifo.user_level)]
 
         # Control
-        pulse_hold = self.csr.timing_ctrl[7]
-        pulse_init = self.csr.timing_ctrl[8]
+        pulse_hold = self.csr.timing_ctrl[0]
+        pulse_init = self.csr.timing_ctrl[1]
 
         force_release = Signal()
         with m.If(self.fifos.cmd_fifo.full):
