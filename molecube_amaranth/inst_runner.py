@@ -10,6 +10,10 @@ from transactron.lib import PipelineBuilder
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .utils import assign_xvalue, xvalue
 
+def single_cycle(m, en):
+    m.d.sync += en.eq(0)
+    return Transaction().body(m, ready=en)
+
 class DDSOpCode(enum.Enum, shape=4):
     SET_FREQ = 0
     SET_AMP_PHASE = 1
@@ -302,12 +306,49 @@ class InstRunner(Elaboratable):
             self.csr.dbg_inst_cycle.count(m)
 
         loopback_result = Signal(32, reset_less=True)
-        write_result = Signal(1)
         m.d.sync += loopback_result.eq(exe_inst.loopback)
-        with Transaction().body(m, ready=write_result):
+        with single_cycle(m, write_result := Signal()):
             self.csr.dbg_loopback_count.count(m)
             self.fifos.result_fifo.write(m, loopback_result)
-            m.d.sync += write_result.eq(0)
+
+        if self.clock_shift != 0:
+            with single_cycle(m, ttl_output_en := Signal()):
+                self.csr.dbg_ttl_count.count(m)
+                ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
+                                            value=exe_inst.ttl.value)
+
+        with single_cycle(m, dds_output_en := Signal()):
+            self.csr.dbg_dds_count.count(m)
+            with m.If(exe_inst.dds.is_dds1):
+                ioctrl.dds1.set(m, exe_inst.dds.arg)
+            with m.Else():
+                ioctrl.dds0.set(m, exe_inst.dds.arg)
+
+        with single_cycle(m, wait_count_en := Signal()):
+            self.csr.dbg_wait_count.count(m)
+
+        with single_cycle(m, clear_underflow_en := Signal()):
+            self.csr.dbg_underflow_cycle.clear(m)
+            self.csr.dbg_clear_count.count(m)
+            m.d.sync += [underflow.eq(0),
+                         trigger_timeout.eq(0)]
+
+        with single_cycle(m, loopback_write_en := Signal()):
+            m.d.sync += write_result.eq(1)
+
+        with single_cycle(m, clock_output_en := Signal()):
+            self.csr.dbg_clock_count.count(m)
+            ioctrl.clockout.set(m, shift_cycle_m1(exe_inst.clockout))
+
+        with single_cycle(m, spi_output_en := Signal()):
+            self.csr.dbg_spi_count.count(m)
+            ioctrl.spi.set(m, data=exe_inst.spi.data << (32 - 18),
+                           div=shift_cycle_m1(exe_inst.spi.clk_div),
+                           nbits_minus_1=17,
+                           result=exe_inst.spi.save_result,
+                           id=exe_inst.spi.id,
+                           clk_pha=exe_inst.spi.clk_pha,
+                           clk_pol=exe_inst.spi.clk_pol)
 
         with m.Switch(state):
             with m.Case(RunState.FETCH):
@@ -331,10 +372,24 @@ class InstRunner(Elaboratable):
                                                         value=new_inst.ttl.value)
                         with m.If(new_inst.timer >> 1): # timer > 1
                             m.d.sync += state.eq(RunState.EXECUTE)
-                        with m.Elif(new_inst.op == InstOpCode.WAIT):
-                            self.csr.dbg_wait_count.count(m)
                     else:
                         m.d.sync += state.eq(RunState.EXECUTE)
+                    with m.Switch(new_inst.op):
+                        if self.clock_shift != 0:
+                            with m.Case(InstOpCode.TTL):
+                                m.d.sync += ttl_output_en.eq(1)
+                        with m.Case(InstOpCode.DDS):
+                            m.d.sync += dds_output_en.eq(1)
+                        with m.Case(InstOpCode.WAIT):
+                            m.d.sync += wait_count_en.eq(1)
+                        with m.Case(InstOpCode.CLEAR_UNDERFLOW):
+                            m.d.sync += clear_underflow_en.eq(1)
+                        with m.Case(InstOpCode.LOOPBACK):
+                            m.d.sync += loopback_write_en.eq(1)
+                        with m.Case(InstOpCode.CLOCKOUT):
+                            m.d.sync += clock_output_en.eq(1)
+                        with m.Case(InstOpCode.SPI):
+                            m.d.sync += spi_output_en.eq(1)
 
                 with m.If(~fetch_inst.run):
                     m.d.sync += pulses_finished.eq(1)
@@ -348,46 +403,9 @@ class InstRunner(Elaboratable):
                 m.d.sync += state.eq(RunState.WAIT)
 
                 with m.Switch(exe_inst.op):
-                    with m.Case(InstOpCode.TTL):
-                        if self.clock_shift != 0:
-                            with Transaction().body(m):
-                                self.csr.dbg_ttl_count.count(m)
-                                ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
-                                                            value=exe_inst.ttl.value)
-                    with m.Case(InstOpCode.DDS):
-                        with Transaction().body(m):
-                            self.csr.dbg_dds_count.count(m)
-                            with m.If(exe_inst.dds.is_dds1):
-                                ioctrl.dds1.set(m, exe_inst.dds.arg)
-                            with m.Else():
-                                ioctrl.dds0.set(m, exe_inst.dds.arg)
                     with m.Case(InstOpCode.WAIT):
-                        with Transaction().body(m):
-                            self.csr.dbg_wait_count.count(m)
                         m.d.sync += state.eq(Mux(exe_trig_enable,
                                                  RunState.TRIG_INIT, RunState.WAIT))
-                    with m.Case(InstOpCode.CLEAR_UNDERFLOW):
-                        with Transaction().body(m):
-                            self.csr.dbg_underflow_cycle.clear(m)
-                            self.csr.dbg_clear_count.count(m)
-                        m.d.sync += [underflow.eq(0),
-                                     trigger_timeout.eq(0)]
-                    with m.Case(InstOpCode.LOOPBACK):
-                        m.d.sync += write_result.eq(1)
-                    with m.Case(InstOpCode.CLOCKOUT):
-                        with Transaction().body(m):
-                            self.csr.dbg_clock_count.count(m)
-                            ioctrl.clockout.set(m, shift_cycle_m1(exe_inst.clockout))
-                    with m.Case(InstOpCode.SPI):
-                        with Transaction().body(m):
-                            self.csr.dbg_spi_count.count(m)
-                            ioctrl.spi.set(m, data=exe_inst.spi.data << (32 - 18),
-                                           div=shift_cycle_m1(exe_inst.spi.clk_div),
-                                           nbits_minus_1=17,
-                                           result=exe_inst.spi.save_result,
-                                           id=exe_inst.spi.id,
-                                           clk_pha=exe_inst.spi.clk_pha,
-                                           clk_pol=exe_inst.spi.clk_pol)
                 with m.If(wait_end):
                     m.d.sync += state.eq(RunState.FETCH)
 
