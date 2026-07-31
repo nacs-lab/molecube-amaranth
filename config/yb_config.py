@@ -15,6 +15,15 @@ for bank in range(2):
             ttl_pins.append(sma_pin(0, 4))
 
 ttlin_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(1, 2), sma_pin(0, 0)]
+ttlin_test_pins = [ttl_bd_pin(1, 24), ttl_bd_pin(0, 24), sma_pin(1, 2), sma_pin(0, 0),
+                   sma_pin(0, 1),
+                   sma_pin(0, 2),
+                   sma_pin(0, 3),
+                   sma_pin(0, 5),
+                   sma_pin(1, 1),
+                   sma_pin(1, 4),
+                   sma_pin(1, 5)]
 
 config = Config(TTLIN=' '.join(ttlin_pins), TTLOUT=' '.join(ttl_pins))
 config100 = dataclasses.replace(config, CLOCK_HZ=100e6, CLOCK_SHIFT=0)
+config_test = dataclasses.replace(config, TTLIN=' '.join(ttlin_test_pins))
