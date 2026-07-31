@@ -219,7 +219,6 @@ class ControlInterface(Elaboratable):
         @write_pipe.stage(m)
         def _(idx, data):
             with m.If(idx == 0x1f):
-                csr.dbg_inst_word_count.count(m)
                 cmd_pre_fifo.write(m, data)
             with m.Elif(idx == 0x58):
                 self.fifos.dma_cmd_fifo.write(m, addr=Cat(C(0, 12), data[12:]),
@@ -383,8 +382,6 @@ class ControlInterface(Elaboratable):
         read_states.add_leaf(0x1d, rd_ttl_lo(7))
         read_states.add_leaf(0x1e, rd_shadow.loopback)
         read_states.add_leaf(0x1f, 'fifo_data', 32)
-        read_states.add_leaf(0x20, rd_shadow.dbg_inst_word_count)
-        read_states.add_leaf(0x21, rd_shadow.dbg_inst_count)
         read_states.add_leaf(0x22, rd_shadow.dbg_ttl_count)
         read_states.add_leaf(0x23, rd_shadow.dbg_dds_count)
         read_states.add_leaf(0x24, rd_shadow.dbg_wait_count)
@@ -393,10 +390,6 @@ class ControlInterface(Elaboratable):
         read_states.add_leaf(0x27, rd_shadow.dbg_clock_count)
         read_states.add_leaf(0x28, rd_shadow.dbg_spi_count)
         read_states.add_leaf(0x29, rd_shadow.dbg_underflow_cycle)
-        read_states.add_leaf(0x2a, rd_shadow.dbg_inst_cycle)
-        # read_states.add_leaf(0x2b, rd_shadow.dbg_ttl_cycle)
-        # read_states.add_leaf(0x2c, rd_shadow.dbg_wait_cycle)
-        # read_states.add_leaf(0x2d, rd_shadow.dbg_result_overflow_count)
         read_states.add_leaf(0x2e, rd_shadow.dbg_result_count)
         read_states.add_leaf(0x2f, rd_shadow.dbg_result_generated)
         read_states.add_leaf(0x30, rd_shadow.dbg_result_consumed)

@@ -93,7 +93,6 @@ class TestInstRunner(TestCaseWithSimulator):
             for _ in range(100):
                 await sim.tick()
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 0
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -102,7 +101,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == 0
             assert sim.get(circ.csr.dbg_result_generated.value) == 0
             assert sim.get(circ.csr.dbg_result_consumed.value) == 0
 
@@ -143,7 +141,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 2
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -152,7 +149,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -192,7 +188,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 1
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -201,7 +196,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (t1 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -248,7 +242,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 3
             assert sim.get(circ.csr.dbg_ttl_count.value) == 3
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -257,7 +250,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2 + t3) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -303,7 +295,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 3
             assert sim.get(circ.csr.dbg_ttl_count.value) == 3
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -312,7 +303,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + 1 + t3) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -345,7 +335,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 2
@@ -354,7 +343,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -396,7 +384,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 4
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 2
@@ -405,7 +392,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 2
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2 + 10) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -446,7 +432,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 4
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 2
@@ -455,7 +440,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 2
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2 + 10) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -495,7 +479,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 0
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -504,7 +487,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == 0
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -551,7 +533,6 @@ class TestInstRunner(TestCaseWithSimulator):
             await sim.tick()
             assert sim.get(circ.csr.timing_status) >> 4 == 0
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -560,7 +541,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (10 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -601,7 +581,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 2
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -610,7 +589,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -656,7 +634,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x5
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 2
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -665,7 +642,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 4 - (1 << circ.clock_shift)
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
             # Set init, which should clear the underflow flag
             sim.set(circ.csr.timing_ctrl, 1 << 1)
@@ -723,7 +699,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -732,7 +707,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + 5) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -780,7 +754,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 3
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 1
@@ -789,7 +762,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t0 + t1 + 5) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -831,7 +803,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x6
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 1
@@ -840,7 +811,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t0 + t1) << circ.clock_shift)
 
             # Set init, which should clear the timeout flag
             sim.set(circ.csr.timing_ctrl, 1 << 1)
@@ -901,7 +871,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 1
@@ -910,7 +879,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((6 + t1) << circ.clock_shift) + 3
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -962,7 +930,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 1
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 1
@@ -971,7 +938,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((12 + t1) << circ.clock_shift) + 3
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1018,7 +984,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 2
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1027,7 +992,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == ((t1 + t2) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1078,7 +1042,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == fifo_depth * 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == fifo_depth * 2
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1087,7 +1050,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (sum(ts) << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1127,7 +1089,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1136,7 +1097,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1180,7 +1140,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1189,7 +1148,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1233,7 +1191,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1242,7 +1199,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1286,7 +1242,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1295,7 +1250,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1333,7 +1287,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1342,7 +1295,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1398,7 +1350,6 @@ class TestInstRunner(TestCaseWithSimulator):
             await sim.tick()
             assert sim.get(circ.csr.timing_status) >> 4 == 0
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1407,7 +1358,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1463,7 +1413,6 @@ class TestInstRunner(TestCaseWithSimulator):
             await sim.tick()
             assert sim.get(circ.csr.timing_status) >> 4 == 0
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 2
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 2
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1472,7 +1421,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 0
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (100 << circ.clock_shift)
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -1554,7 +1502,6 @@ class TestInstRunner(TestCaseWithSimulator):
                 await sim.tick()
                 assert sim.get(circ.csr.timing_status) == 0x4 | (nres << 4)
 
-            assert sim.get(circ.csr.dbg_inst_count.value) == 4
             assert sim.get(circ.csr.dbg_ttl_count.value) == 0
             assert sim.get(circ.csr.dbg_dds_count.value) == 0
             assert sim.get(circ.csr.dbg_wait_count.value) == 0
@@ -1563,7 +1510,6 @@ class TestInstRunner(TestCaseWithSimulator):
             assert sim.get(circ.csr.dbg_clock_count.value) == 0
             assert sim.get(circ.csr.dbg_spi_count.value) == 4
             assert sim.get(circ.csr.dbg_underflow_cycle.value) == 0
-            assert sim.get(circ.csr.dbg_inst_cycle.value) == (180 << circ.clock_shift)
 
             result_datas = [result_data1, result_data2, result_data3, result_data4] if spi else [0, 0, 0, 0]
 

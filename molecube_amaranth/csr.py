@@ -129,8 +129,6 @@ class Registers(Elaboratable):
         self.dbg_result_count = Signal(6)
 
         self.all_counters = dict(
-            dbg_inst_word_count=Counter(self.REG_WIDTH),
-            dbg_inst_count=Counter(self.REG_WIDTH),
             dbg_ttl_count=Counter(self.REG_WIDTH),
             dbg_dds_count=Counter(self.REG_WIDTH),
             dbg_wait_count=Counter(self.REG_WIDTH),
@@ -139,10 +137,6 @@ class Registers(Elaboratable):
             dbg_clock_count=Counter(self.REG_WIDTH),
             dbg_spi_count=Counter(self.REG_WIDTH),
             dbg_underflow_cycle=Counter(self.REG_WIDTH),
-            dbg_inst_cycle=Counter(self.REG_WIDTH),
-            # dbg_ttl_cycle=Counter(self.REG_WIDTH),
-            # dbg_wait_cycle=Counter(self.REG_WIDTH),
-            # dbg_result_overflow_count=Counter(self.REG_WIDTH),
             dbg_result_generated=Counter(self.REG_WIDTH),
             dbg_result_consumed=Counter(self.REG_WIDTH),
         )

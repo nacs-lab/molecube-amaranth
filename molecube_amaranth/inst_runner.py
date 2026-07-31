@@ -279,7 +279,7 @@ class InstRunner(Elaboratable):
 
         @decode_pipe.stage(m, ready=force_release | ~pulse_hold)
         def _():
-            self.csr.dbg_inst_count.count(m)
+            pass
 
         decode_pipe.fifo(depth=2)
 
@@ -298,9 +298,6 @@ class InstRunner(Elaboratable):
         exe_inst = Signal(DECODED_INST, reset_less=True)
         exe_trig_enable = Signal(reset_less=True)
         assign_xvalue(m, exe_trig_enable)
-
-        with Transaction().body(m, ready=~pulses_finished):
-            self.csr.dbg_inst_cycle.count(m)
 
         loopback_result = Signal(32, reset_less=True)
         with single_cycle(m, write_result := Signal()):
@@ -429,8 +426,6 @@ class InstRunner(Elaboratable):
 
         with Transaction().body(m, ready=pulse_init):
             ioctrl.clockout.set(m, ioctrl.clockout.OFF)
-            self.csr.dbg_inst_word_count.clear(m)
-            self.csr.dbg_inst_count.clear(m)
             self.csr.dbg_ttl_count.clear(m)
             self.csr.dbg_dds_count.clear(m)
             self.csr.dbg_wait_count.clear(m)
@@ -439,11 +434,8 @@ class InstRunner(Elaboratable):
             self.csr.dbg_clock_count.clear(m)
             self.csr.dbg_spi_count.clear(m)
             self.csr.dbg_underflow_cycle.clear(m)
-            self.csr.dbg_inst_cycle.clear(m)
             self.csr.dbg_result_generated.clear(m)
             self.csr.dbg_result_consumed.clear(m)
-            # self.csr.dbg_ttl_cycle.clear(m)
-            # self.csr.dbg_wait_cycle.clear(m)
             m.d.sync += [state.eq(RunState.FETCH),
                          check_timing.eq(0),
                          underflow.eq(0),

@@ -77,11 +77,8 @@ class InterfaceWrapper(Elaboratable):
 
         self.read_only_regs = {
             0x02: self.csr.timing_status,
-            # 0x04: self.ttl_out_reg(0),
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
-            0x20: self.csr.dbg_inst_word_count.value,
-            0x21: self.csr.dbg_inst_count.value,
             0x22: self.csr.dbg_ttl_count.value,
             0x23: self.csr.dbg_dds_count.value,
             0x24: self.csr.dbg_wait_count.value,
@@ -90,21 +87,10 @@ class InterfaceWrapper(Elaboratable):
             0x27: self.csr.dbg_clock_count.value,
             0x28: self.csr.dbg_spi_count.value,
             0x29: self.csr.dbg_underflow_cycle.value,
-            0x2a: self.csr.dbg_inst_cycle.value,
-            # 0x2b: self.csr.dbg_ttl_cycle.value,
-            # 0x2c: self.csr.dbg_wait_cycle.value,
-            # 0x2d: self.csr.dbg_result_overflow_count.value,
             0x2e: self.csr.dbg_result_count,
             0x2f: self.csr.dbg_result_generated.value,
             0x30: self.csr.dbg_result_consumed.value,
 
-            # 0x40: self.ttl_out_reg(1),
-            # 0x41: self.ttl_out_reg(2),
-            # 0x42: self.ttl_out_reg(3),
-            # 0x43: self.ttl_out_reg(4),
-            # 0x44: self.ttl_out_reg(5),
-            # 0x45: self.ttl_out_reg(6),
-            # 0x46: self.ttl_out_reg(7),
             0x58: Signal.cast(self.csr.dma_status),
         }
 
@@ -115,28 +101,28 @@ class InterfaceWrapper(Elaboratable):
             0x05: self.csr.clockout_div,
             0x10: self.ttl_hi_reg(1),
             0x11: self.ttl_lo_reg(1),
-            # 0x12: self.ttl_hi_reg(2),
-            # 0x13: self.ttl_lo_reg(2),
-            # 0x14: self.ttl_hi_reg(3),
-            # 0x15: self.ttl_lo_reg(3),
-            # 0x16: self.ttl_hi_reg(4),
-            # 0x17: self.ttl_lo_reg(4),
-            # 0x18: self.ttl_hi_reg(5),
-            # 0x19: self.ttl_lo_reg(5),
-            # 0x1a: self.ttl_hi_reg(6),
-            # 0x1b: self.ttl_lo_reg(6),
-            # 0x1c: self.ttl_hi_reg(7),
-            # 0x1d: self.ttl_lo_reg(7),
+            0x12: self.ttl_hi_reg(2),
+            0x13: self.ttl_lo_reg(2),
+            0x14: self.ttl_hi_reg(3),
+            0x15: self.ttl_lo_reg(3),
+            0x16: self.ttl_hi_reg(4),
+            0x17: self.ttl_lo_reg(4),
+            0x18: self.ttl_hi_reg(5),
+            0x19: self.ttl_lo_reg(5),
+            0x1a: self.ttl_hi_reg(6),
+            0x1b: self.ttl_lo_reg(6),
+            0x1c: self.ttl_hi_reg(7),
+            0x1d: self.ttl_lo_reg(7),
             0x1e: self.csr.loopback,
 
             0x48: self.dma_ttl_reg(0),
             0x49: self.dma_ttl_reg(1),
-            # 0x4a: self.dma_ttl_reg(2),
-            # 0x4b: self.dma_ttl_reg(3),
-            # 0x4c: self.dma_ttl_reg(4),
-            # 0x4d: self.dma_ttl_reg(5),
-            # 0x4e: self.dma_ttl_reg(6),
-            # 0x4f: self.dma_ttl_reg(7),
+            0x4a: self.dma_ttl_reg(2),
+            0x4b: self.dma_ttl_reg(3),
+            0x4c: self.dma_ttl_reg(4),
+            0x4d: self.dma_ttl_reg(5),
+            0x4e: self.dma_ttl_reg(6),
+            0x4f: self.dma_ttl_reg(7),
 
             0x50: self.csr.dds_timing1,
             0x51: self.csr.dds_timing2,
@@ -488,8 +474,6 @@ class TestInterface(TestCaseWithSimulator):
                 inst = (await read_inst.call_try(sim)).data
                 assert inst == written[read_count * 2] | (written[read_count * 2 + 1] << 32)
                 read_count += 1
-
-            assert sim.get(iface.csr.dbg_inst_word_count.value) == len(written)
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(producer)
