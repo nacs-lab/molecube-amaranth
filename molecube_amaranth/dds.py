@@ -160,6 +160,7 @@ class DDSController(Elaboratable):
 
         dds_next_addr = Signal(6, reset_less=True)
         dds_next_data = Signal(16, reset_less=True)
+        dds_prev_data = Signal(16, reset_less=True)
 
         m.submodules.regs_cache = regs_cache = Memory(shape=unsigned(16),
                                                       depth=11 << 6, init=[])
@@ -175,12 +176,11 @@ class DDSController(Elaboratable):
                                    levels=2, reset_mid=False, reset_output=False)
         m.d.comb += Cat(wr_cache.addr, wr_cache.data).eq(wr_cache_ad)
 
-        m.d.sync += wr_cache_en.eq(0)
-        assign_xvalue(m, wr_cache_addr)
+        m.d.sync += [wr_cache_en.eq(0),
+                     wr_cache_addr.eq(Cat(dds_addr, dds_id))]
         assign_xvalue(m, wr_cache_data)
         def do_cache(data):
             m.d.sync += [wr_cache_en.eq(1),
-                         wr_cache_addr.eq(Cat(dds_addr, dds_id)),
                          wr_cache_data.eq(data)]
 
         rd_cache = regs_cache.read_port()
@@ -227,54 +227,9 @@ class DDSController(Elaboratable):
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)
 
-        with m.If(~hold_end):
-            m.d.sync += [hold_cnt.eq(hold_cnt - 1),
-                         hold_end.eq(hold_cnt[1:] == 0)]
-            with m.Switch(fsm_state):
-                with m.Case(FSMState.IDLE):
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-
-                with m.Case(FSMState.WR_ADSETUP2):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                with m.Case(FSMState.WR_ENABLE2):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                with m.Case(FSMState.WR_FUDWAIT):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-                with m.Case(FSMState.WR_FINALHOLD):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-
-                with m.Case(FSMState.RESET):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-
-                with m.Case(FSMState.RD_DELAY1):
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_need_fud)
-                with m.Case(FSMState.RD_ASETUP2):
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_need_fud)
-                with m.Case(FSMState.RD_FINISH):
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-        with m.Else():
+        m.d.sync += [hold_cnt.eq(hold_cnt - 1),
+                     hold_end.eq(hold_cnt[1:] == 0)]
+        with m.If(hold_end):
             with m.Switch(fsm_state):
                 with m.Case(FSMState.WR_ADSETUP1):
                     # Assert write enable
@@ -296,8 +251,6 @@ class DDSController(Elaboratable):
                                  hold_end.eq(self.csr.dds_write_adsu_iszero),
                                  dds_addr.eq(dds_next_addr),
                                  dds_data_out.eq(dds_next_data)]
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
                 with m.Case(FSMState.WR_ADSETUP2):
                     # Assert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ENABLE2),
@@ -305,9 +258,6 @@ class DDSController(Elaboratable):
                                  hold_end.eq(self.csr.dds_write_wrlow_iszero),
                                  dds_wr.eq(1)]
                     do_cache(dds_data_out)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
                 with m.Case(FSMState.WR_ENABLE2):
                     # Deassert write enable
                     m.d.sync += [fsm_state.eq(Mux(dds_need_fud, FSMState.WR_FUDWAIT,
@@ -318,20 +268,14 @@ class DDSController(Elaboratable):
                                                  self.csr.dds_write_fuddl_iszero,
                                                  self.csr.dds_write_adhd_iszero)),
                                  dds_wr.eq(0)]
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
+
                 with m.Case(FSMState.WR_FUDWAIT):
                     # Assert IO update
                     m.d.sync += [fsm_state.eq(FSMState.WR_FINALHOLD),
                                  hold_cnt.eq(self.csr.dds_write_fudhd),
                                  hold_end.eq(self.csr.dds_write_fudhd_iszero),
                                  dds_fud.eq(1)]
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
+
                 with m.Case(FSMState.WR_FINALHOLD):
                     # Deassert IO update
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
@@ -340,12 +284,6 @@ class DDSController(Elaboratable):
                                  dds_addr.eq(0),
                                  dds_data_out.eq(0),
                                  self.busy.eq(0)]
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
 
                 with m.Case(FSMState.RESET):
                     # Done reset
@@ -353,12 +291,6 @@ class DDSController(Elaboratable):
                                  dds_cs.eq(0),
                                  dds_reset.eq(0),
                                  self.busy.eq(0)]
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
 
                 with m.Case(FSMState.RD_ASETUP1):
                     # Setup address and read enable
@@ -366,18 +298,16 @@ class DDSController(Elaboratable):
                                  hold_cnt.eq(self.csr.dds_read_rdl),
                                  hold_end.eq(self.csr.dds_read_rdl_iszero),
                                  dds_rd.eq(0),
-                                 dds_next_data.eq(dds_data_in),
+                                 dds_prev_data.eq(dds_data_in),
                                  dds_addr.eq(dds_next_addr)]
                     do_cache(dds_data_in)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_need_fud)
+
                 with m.Case(FSMState.RD_DELAY1):
                     m.d.sync += [fsm_state.eq(FSMState.RD_ASETUP2),
                                  hold_cnt.eq(self.csr.dds_read_asu),
                                  hold_end.eq(self.csr.dds_read_asu_iszero),
                                  dds_rd.eq(1)]
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_need_fud)
+
                 with m.Case(FSMState.RD_ASETUP2):
                     m.d.sync += [fsm_state.eq(FSMState.RD_FINISH),
                                  hold_cnt.eq(self.csr.dds_read_rdhoz),
@@ -385,30 +315,13 @@ class DDSController(Elaboratable):
                                  dds_rd.eq(0),
                                  dds_addr.eq(0),
                                  write_result.eq(1)]
-                    top_d(m).sync += final_result.eq(Cat(dds_data_in, dds_next_data))
+                    top_d(m).sync += final_result.eq(Cat(dds_data_in, dds_prev_data))
                     do_cache(dds_data_in)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
                 with m.Case(FSMState.RD_FINISH):
                     m.d.sync += [fsm_state.eq(FSMState.IDLE),
                                  dds_cs.eq(0),
                                  dds_data_oe.eq(1),
                                  self.busy.eq(0)]
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
-                with m.Default():
-                    assign_xvalue(m, hold_cnt)
-                    assign_xvalue(m, hold_end)
-                    assign_xvalue(m, dds_next_data)
-                    assign_xvalue(m, dds_next_addr)
-                    assign_xvalue(m, dds_id)
-                    assign_xvalue(m, dds_need_fud)
 
         @def_method(m, self.set, combiner=oring_combiner, nonexclusive=True)
         def _(arg):
