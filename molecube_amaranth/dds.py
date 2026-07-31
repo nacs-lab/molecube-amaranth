@@ -7,7 +7,7 @@ from amaranth.lib.memory import Memory
 
 from transactron import TModule, Transaction, Method, def_method
 
-from .utils import xvalue, assign_xvalue, oring_combiner, reg_chain
+from .utils import xvalue, assign_xvalue, oring_combiner, reg_chain, top_d
 
 
 class FSMState(enum.Enum):
@@ -223,9 +223,7 @@ class DDSController(Elaboratable):
 
         final_result = Signal(32, reset_less=True)
         write_result = Signal()
-        m.d.sync += [final_result.eq(Cat(dds_data_in, dds_next_data)),
-                     write_result.eq(0)]
-
+        m.d.sync += write_result.eq(0)
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)
 
@@ -387,6 +385,7 @@ class DDSController(Elaboratable):
                                  dds_rd.eq(0),
                                  dds_addr.eq(0),
                                  write_result.eq(1)]
+                    top_d(m).sync += final_result.eq(Cat(dds_data_in, dds_next_data))
                     do_cache(dds_data_in)
                     assign_xvalue(m, dds_next_data)
                     assign_xvalue(m, dds_next_addr)

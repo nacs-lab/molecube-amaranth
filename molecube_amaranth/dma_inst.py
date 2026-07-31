@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import BufferedFifo
-from .utils import assign_xvalue
+from .utils import assign_xvalue, top_d
 from .trigger import TriggerController
 
 # Instruction format:
@@ -525,12 +525,14 @@ class DMAInstRunner(Elaboratable):
                 with fetch_trans.body(m):
                     req = inst_conn.read(m)
                     m.d.sync += output_en.eq(1)
+                    top_d(m).sync += output_action.eq(req.action)
                     wait = req.wait.wait
                     with m.If(idling):
                         self.dmactrl.inst_started(m)
                     with m.If(req.is_trig):
                         m.d.sync += [state.eq(State.TRIG),
                                      trig_en.eq(1)]
+                        top_d(m).sync += trig_action.eq(req.wait.wait_trig)
                     with m.Elif(~wait.is0):
                         m.d.sync += [counter.eq(wait.cycle - 1),
                                      state.eq(State.WAIT)]
@@ -551,8 +553,5 @@ class DMAInstRunner(Elaboratable):
                     with m.If(self.ioctrl.trigger.wait(m).timeout):
                         self.dmactrl.trig_timeout(m)
                     m.d.sync += state.eq(State.FETCH)
-
-        m.d.sync += [output_action.eq(req.action),
-                     trig_action.eq(req.wait.wait_trig)]
 
         return m

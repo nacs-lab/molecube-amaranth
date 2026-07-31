@@ -3,6 +3,8 @@
 from amaranth import *
 from amaranth.lib.data import Layout, View
 
+from transactron import TModule
+
 import random
 
 _FILENAME = "_xvalue_source.v"
@@ -125,3 +127,11 @@ def reg_chain(m, *, input=None, levels, output=None, reset_input=True, reset_mid
         input = Signal.like(output, init=get_init(output), reset_less=not reset_input)
     m.submodules += RegChain(output, input, levels, reset_less=not reset_mid)
     return output, input
+
+def submod(m):
+    submod = TModule()
+    m.submodules += submod
+    return submod
+
+def top_d(m, domain='sync'):
+    return submod(m).d

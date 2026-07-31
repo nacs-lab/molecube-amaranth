@@ -5,7 +5,7 @@ from amaranth.lib.data import StructLayout
 
 from transactron import TModule, Transaction, Method, def_method
 
-from .utils import assign_xvalue, oring_combiner
+from .utils import assign_xvalue, oring_combiner, top_d
 
 class SPIController(Elaboratable):
     def __init__(self, spiio, result_fifo, *, div_width=9):
@@ -64,8 +64,7 @@ class SPIController(Elaboratable):
 
         final_result = Signal(32, reset_less=True)
         write_result = Signal()
-        m.d.sync += [write_result.eq(0),
-                     final_result.eq(result_data)]
+        m.d.sync += write_result.eq(0)
 
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)
@@ -113,6 +112,7 @@ class SPIController(Elaboratable):
                              spi_sclk.eq(1),
                              status.data[31].eq(0),
                              write_result.eq(status.result & self.busy)]
+                top_d(m).sync += final_result.eq(result_data)
             with m.Elif(self.busy):
                 m.d.sync += spi_sclk.eq(~spi_sclk)
 

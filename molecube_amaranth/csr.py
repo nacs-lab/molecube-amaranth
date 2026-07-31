@@ -81,13 +81,13 @@ class Registers(Elaboratable):
         self.ttl_out = Signal(nttl_out)
         self.dma_ttl_mask = Signal(nttl_out)
 
-        self.ttl_in = Signal(nttl_in)
+        self.ttl_in = Signal(nttl_in, reset_less=True)
 
         self.timing_status1 = Signal(TimeStatus1, reset_less=True)
         self.timing_status2 = Signal(TimeStatus2, reset_less=True)
         self.timing_ctrl = Signal(2)
         self.clockout_div = Signal(self.CLKDIV_WIDTH, init=255)
-        self.loopback = Signal(self.REG_WIDTH)
+        self.loopback = Signal(self.REG_WIDTH, reset_less=True)
         self.dds0_reg = Signal(self.REG_WIDTH, reset_less=True)
         self.dds1_reg = Signal(self.REG_WIDTH, reset_less=True)
         self.dma_status = Signal(DMAStatus, init={'cmd_empty': 1})

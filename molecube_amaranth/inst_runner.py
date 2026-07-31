@@ -8,7 +8,7 @@ from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
-from .utils import assign_xvalue, xvalue
+from .utils import assign_xvalue, xvalue, top_d
 
 def single_cycle(m, en):
     m.d.sync += en.eq(0)
@@ -303,7 +303,6 @@ class InstRunner(Elaboratable):
             self.csr.dbg_inst_cycle.count(m)
 
         loopback_result = Signal(32, reset_less=True)
-        m.d.sync += loopback_result.eq(exe_inst.loopback)
         with single_cycle(m, write_result := Signal()):
             self.csr.dbg_loopback_count.count(m)
             self.fifos.result_fifo.write(m, loopback_result)
@@ -332,6 +331,7 @@ class InstRunner(Elaboratable):
 
         with single_cycle(m, loopback_write_en := Signal()):
             m.d.sync += write_result.eq(1)
+            top_d(m).sync += loopback_result.eq(exe_inst.loopback)
 
         with single_cycle(m, clock_output_en := Signal()):
             self.csr.dbg_clock_count.count(m)
@@ -352,6 +352,7 @@ class InstRunner(Elaboratable):
                 fetch_inst = Transaction()
                 with fetch_inst.body(m):
                     new_inst = read_decoded(m)
+                    top_d(m).sync += exe_inst.eq(new_inst)
                     m.d.sync += [check_timing.eq(new_inst.time_check),
                                  pulses_finished.eq(0)]
                     trig_type = new_inst.wait.trig_type
@@ -425,8 +426,6 @@ class InstRunner(Elaboratable):
                 with m.Elif(wait_end):
                     m.d.sync += [state.eq(RunState.FETCH),
                                  trigger_timeout.eq(1)]
-
-        m.d.sync += exe_inst.eq(new_inst)
 
         with Transaction().body(m, ready=pulse_init):
             ioctrl.clockout.set(m, ioctrl.clockout.OFF)
