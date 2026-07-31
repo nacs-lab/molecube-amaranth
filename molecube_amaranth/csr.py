@@ -17,7 +17,7 @@ def cast_to_width(s, width, allow_trunc=False):
             raise TypeError("Signal truncation not allowed")
         return s[:width]
     else:
-        return Cat(s, Signal(width - l))
+        return Cat(s, Signal(width - l, reset_less=True))
 
 class Counter(wiring.Component):
     def __init__(self, width):
@@ -79,7 +79,11 @@ class Registers(Elaboratable):
         self.ttl_hi_mask = Signal(nttl_out)
         self.ttl_lo_mask = Signal(nttl_out)
         self.ttl_out = Signal(nttl_out)
-        self.dma_ttl_mask = Signal(nttl_out)
+        # No need to initialize/reset DMA TTL mask
+        # since this is only used when running TTL command
+        # and not directly affect the output
+        # The user must set this explicitly before running anything.
+        self.dma_ttl_mask = Signal(nttl_out, reset_less=True)
 
         self.ttl_in = Signal(nttl_in, reset_less=True)
 
@@ -117,7 +121,7 @@ class Registers(Elaboratable):
                      'dds_write_fuddl', 'dds_write_fudhd', 'dds_read_asu',
                      'dds_read_rdl', 'dds_read_rdhoz', 'dds_reset_rshd'):
             r = getattr(self, name)
-            r0 = Signal(name=f'{name}_iszero')
+            r0 = Signal(name=f'{name}_iszero', reset_less=True)
             setattr(self, f'{name}_iszero', r0)
             r.attrs["molecube.vivado.false_path_from"] = "TRUE"
             r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
@@ -164,7 +168,7 @@ class Registers(Elaboratable):
     @property
     def timing_status(self):
         return Cat(Signal.cast(self.timing_status1),
-                   Signal(),
+                   Signal(reset_less=True),
                    Signal.cast(self.timing_status2))
 
     def elaborate(self, m):

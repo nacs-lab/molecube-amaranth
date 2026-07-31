@@ -41,10 +41,13 @@ class TTLOutController(Elaboratable):
         else:
             assert self.delay == 1
             ttl_out = Signal(nttls)
-            m.d.sync += csr_ttl_out.eq(ttl_out)
+            _csr_ttl_out = Signal(nttls, reset_less=True)
+            m.d.comb += csr_ttl_out.eq(_csr_ttl_out)
+            m.d.sync += _csr_ttl_out.eq(ttl_out)
 
         ttl_banks = View(ArrayLayout(unsigned(32), nbanks),
-                         Cat(ttl_out, Signal(full_nttls - nttls)))
+                         Cat(ttl_out, Signal(full_nttls - nttls,
+                                             reset_less=True)))
         m.d.comb += [self.ttloutio.oe.eq(1),
                      self.ttloutio.o.eq((csr_ttl_out | ttl_hi_mask) & ~ttl_lo_mask)]
 
