@@ -34,7 +34,7 @@ class TTLOutController(Elaboratable):
         m.d.sync += [ttl_hi_mask.eq(self.csr.ttl_hi_mask),
                      ttl_lo_mask.eq(self.csr.ttl_lo_mask)]
 
-        csr_ttl_out = self.csr.ttl_out[:nttls]
+        csr_ttl_out = self.csr.ttl_out
 
         if self.delay == 0:
             ttl_out = csr_ttl_out

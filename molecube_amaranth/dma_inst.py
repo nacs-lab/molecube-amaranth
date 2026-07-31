@@ -232,7 +232,7 @@ class DMAInstParser(Elaboratable):
         nttl = self.nttl
         nttl_width = ceil_log2(nttl)
         nttl_total = 1 << nttl_width
-        ttl_mask = self.csr.dma_ttl_mask[:nttl]
+        ttl_mask = self.csr.dma_ttl_mask
 
         def pad_ttl(s):
             return Cat(s, Signal(nttl_total - nttl))
