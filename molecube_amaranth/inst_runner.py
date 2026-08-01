@@ -145,10 +145,8 @@ class InstRunner(Elaboratable):
         # output timing
         timing_status1 = Signal.like(self.csr.timing_status1, reset_less=True)
         timing_status2 = Signal.like(self.csr.timing_status2, reset_less=True)
-        assert len(self.csr.dbg_result_count) == len(self.fifos.result_fifo.level)
         m.d.sync += [self.csr.timing_status1.eq(timing_status1),
                      self.csr.timing_status2.eq(timing_status2),
-                     self.csr.dbg_result_count.eq(self.fifos.result_fifo.level),
                      timing_status1.underflow.eq(underflow),
                      timing_status1.trigger_timeout.eq(trigger_timeout),
                      timing_status1.pulses_finished.eq(pulses_finished),
@@ -301,28 +299,21 @@ class InstRunner(Elaboratable):
 
         loopback_result = Signal(32, reset_less=True)
         with single_cycle(m, write_result := Signal()):
-            self.csr.dbg_loopback_count.count(m)
             self.fifos.result_fifo.write(m, loopback_result)
 
         if self.clock_shift != 0:
             with single_cycle(m, ttl_output_en := Signal()):
-                self.csr.dbg_ttl_count.count(m)
                 ioctrl.ttlout.set_bank_inst(m, bank=exe_inst.ttl.bank,
                                             value=exe_inst.ttl.value)
 
         with single_cycle(m, dds_output_en := Signal()):
-            self.csr.dbg_dds_count.count(m)
             with m.If(exe_inst.dds.is_dds1):
                 ioctrl.dds1.set(m, exe_inst.dds.arg)
             with m.Else():
                 ioctrl.dds0.set(m, exe_inst.dds.arg)
 
-        with single_cycle(m, wait_count_en := Signal()):
-            self.csr.dbg_wait_count.count(m)
-
         with single_cycle(m, clear_underflow_en := Signal()):
             self.csr.dbg_underflow_cycle.clear(m)
-            self.csr.dbg_clear_count.count(m)
             m.d.sync += [underflow.eq(0),
                          trigger_timeout.eq(0)]
 
@@ -331,11 +322,9 @@ class InstRunner(Elaboratable):
             top_d(m).sync += loopback_result.eq(exe_inst.loopback)
 
         with single_cycle(m, clock_output_en := Signal()):
-            self.csr.dbg_clock_count.count(m)
             ioctrl.clockout.set(m, shift_cycle_m1(exe_inst.clockout))
 
         with single_cycle(m, spi_output_en := Signal()):
-            self.csr.dbg_spi_count.count(m)
             ioctrl.spi.set(m, data=exe_inst.spi.data << (32 - 18),
                            div=shift_cycle_m1(exe_inst.spi.clk_div),
                            nbits_minus_1=17,
@@ -361,7 +350,6 @@ class InstRunner(Elaboratable):
 
                     if self.clock_shift == 0:
                         with m.If(new_inst.op == InstOpCode.TTL):
-                            self.csr.dbg_ttl_count.count(m)
                             ioctrl.ttlout.set_bank_inst(m, bank=new_inst.ttl.bank,
                                                         value=new_inst.ttl.value)
                         with m.If(new_inst.timer >> 1): # timer > 1
@@ -375,7 +363,7 @@ class InstRunner(Elaboratable):
                         with m.Case(InstOpCode.DDS):
                             m.d.sync += dds_output_en.eq(1)
                         with m.Case(InstOpCode.WAIT):
-                            m.d.sync += wait_count_en.eq(1)
+                            pass
                         with m.Case(InstOpCode.CLEAR_UNDERFLOW):
                             m.d.sync += clear_underflow_en.eq(1)
                         with m.Case(InstOpCode.LOOPBACK):
@@ -426,16 +414,7 @@ class InstRunner(Elaboratable):
 
         with Transaction().body(m, ready=pulse_init):
             ioctrl.clockout.set(m, ioctrl.clockout.OFF)
-            self.csr.dbg_ttl_count.clear(m)
-            self.csr.dbg_dds_count.clear(m)
-            self.csr.dbg_wait_count.clear(m)
-            self.csr.dbg_clear_count.clear(m)
-            self.csr.dbg_loopback_count.clear(m)
-            self.csr.dbg_clock_count.clear(m)
-            self.csr.dbg_spi_count.clear(m)
             self.csr.dbg_underflow_cycle.clear(m)
-            self.csr.dbg_result_generated.clear(m)
-            self.csr.dbg_result_consumed.clear(m)
             m.d.sync += [state.eq(RunState.FETCH),
                          check_timing.eq(0),
                          underflow.eq(0),

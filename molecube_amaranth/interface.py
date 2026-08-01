@@ -161,10 +161,9 @@ class ControlInterface(Elaboratable):
             setattr(rd_shadow, reg_name, rd_reg)
 
         for reg_name in ['ttl_out', 'ttl_in', 'timing_status', 'clockout_div',
-                         'dbg_result_count', 'dds0_reg', 'dds1_reg', 'dma_status']:
+                         'dds0_reg', 'dds1_reg', 'dma_status']:
             real_reg = Signal.cast(getattr(csr, reg_name))
-            if reg_name in ('ttl_out', 'ttl_in', 'clockout_div',
-                            'dbg_result_count', 'dds0_reg', 'dds1_reg'):
+            if reg_name in ('ttl_out', 'ttl_in', 'clockout_div', 'dds0_reg', 'dds1_reg'):
                 rd_reg = relaxed_read_shadow(m, real_reg)
             else:
                 rd_reg, _ = reg_chain(m, input=real_reg, levels=2,
@@ -194,9 +193,6 @@ class ControlInterface(Elaboratable):
             return rd_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
         def wr_dma_ttl(idx):
             return wr_shadow.dma_ttl_mask[idx * 32:(idx + 1) * 32]
-
-        with Transaction().body(m, ready=self.fifos.result_fifo.write.run):
-            csr.dbg_result_generated.count(m)
 
         dma_enabled = Signal()
         m.d.comb += dma_enabled.eq(csr.dma_ctrl.enabled)
@@ -350,7 +346,6 @@ class ControlInterface(Elaboratable):
         def _(idx, resp):
             res = Signal(self.data_width)
             with m.If((idx == 0x1f) & ~resp[0]):
-                csr.dbg_result_consumed.count(m)
                 m.d.av_comb += res.eq(self.fifos.result_fifo.read(m))
             with m.Else():
                 m.d.av_comb += res.eq(xvalue(m, self.data_width))
@@ -382,17 +377,7 @@ class ControlInterface(Elaboratable):
         read_states.add_leaf(0x1d, rd_ttl_lo(7))
         read_states.add_leaf(0x1e, rd_shadow.loopback)
         read_states.add_leaf(0x1f, 'fifo_data', 32)
-        read_states.add_leaf(0x22, rd_shadow.dbg_ttl_count)
-        read_states.add_leaf(0x23, rd_shadow.dbg_dds_count)
-        read_states.add_leaf(0x24, rd_shadow.dbg_wait_count)
-        read_states.add_leaf(0x25, rd_shadow.dbg_clear_count)
-        read_states.add_leaf(0x26, rd_shadow.dbg_loopback_count)
-        read_states.add_leaf(0x27, rd_shadow.dbg_clock_count)
-        read_states.add_leaf(0x28, rd_shadow.dbg_spi_count)
         read_states.add_leaf(0x29, rd_shadow.dbg_underflow_cycle)
-        read_states.add_leaf(0x2e, rd_shadow.dbg_result_count)
-        read_states.add_leaf(0x2f, rd_shadow.dbg_result_generated)
-        read_states.add_leaf(0x30, rd_shadow.dbg_result_consumed)
 
         read_states.add_leaf(0x40, ttl_out_reg(1))
         read_states.add_leaf(0x41, ttl_out_reg(2))

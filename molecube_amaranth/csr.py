@@ -126,19 +126,8 @@ class Registers(Elaboratable):
             r.attrs["molecube.vivado.false_path_from"] = "TRUE"
             r0.attrs["molecube.vivado.false_path_from"] = "TRUE"
 
-        self.dbg_result_count = Signal(6)
-
         self.all_counters = dict(
-            dbg_ttl_count=Counter(self.REG_WIDTH),
-            dbg_dds_count=Counter(self.REG_WIDTH),
-            dbg_wait_count=Counter(self.REG_WIDTH),
-            dbg_clear_count=Counter(self.REG_WIDTH),
-            dbg_loopback_count=Counter(self.REG_WIDTH),
-            dbg_clock_count=Counter(self.REG_WIDTH),
-            dbg_spi_count=Counter(self.REG_WIDTH),
             dbg_underflow_cycle=Counter(self.REG_WIDTH),
-            dbg_result_generated=Counter(self.REG_WIDTH),
-            dbg_result_consumed=Counter(self.REG_WIDTH),
         )
 
         for (k, v) in self.all_counters.items():

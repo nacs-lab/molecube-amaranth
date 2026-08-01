@@ -79,17 +79,7 @@ class InterfaceWrapper(Elaboratable):
             0x02: self.csr.timing_status,
             0x06: MAJOR_VERSION,
             0x07: MINOR_VERSION,
-            0x22: self.csr.dbg_ttl_count.value,
-            0x23: self.csr.dbg_dds_count.value,
-            0x24: self.csr.dbg_wait_count.value,
-            0x25: self.csr.dbg_clear_count.value,
-            0x26: self.csr.dbg_loopback_count.value,
-            0x27: self.csr.dbg_clock_count.value,
-            0x28: self.csr.dbg_spi_count.value,
             0x29: self.csr.dbg_underflow_cycle.value,
-            0x2e: self.csr.dbg_result_count,
-            0x2f: self.csr.dbg_result_generated.value,
-            0x30: self.csr.dbg_result_consumed.value,
 
             0x58: Signal.cast(self.csr.dma_status),
         }
@@ -491,8 +481,6 @@ class TestInterface(TestCaseWithSimulator):
                 for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == 0
-            assert sim.get(iface.csr.dbg_result_generated.value) == 0
-            assert sim.get(iface.csr.dbg_result_consumed.value) == n1
 
             n2 = 30
             results = []
@@ -503,17 +491,12 @@ class TestInterface(TestCaseWithSimulator):
 
             await sim.tick()
             await sim.tick()
-            assert sim.get(iface.csr.dbg_result_generated.value) == n2
-            assert sim.get(iface.csr.dbg_result_consumed.value) == n1
 
             for i in range(n2):
                 assert (await iface.read_request.call_try(sim, addr=0x1f * 4)) is not None
                 for _ in range(READ_LATENCY):
                     await sim.tick()
                 assert (await iface.read_reply.call_try(sim)).data == results[i]
-
-            assert sim.get(iface.csr.dbg_result_generated.value) == n2
-            assert sim.get(iface.csr.dbg_result_consumed.value) == n1 + n2
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)
