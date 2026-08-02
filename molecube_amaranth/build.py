@@ -110,6 +110,8 @@ def build_uboot(*, build_dir='build_boot'):
                     build_dir / "boot.scr"])
 
 def build_boot(config, *, build_dir='build_boot'):
+    build_dir = Path(build_dir)
+
     build_fsbl(config, build_dir=build_dir)
     build_uboot(build_dir=build_dir)
     (boot_dir / "boot.bif").copy_into(build_dir)
