@@ -387,6 +387,7 @@ class DDSController(Elaboratable):
                          dds_data_out.eq(arg.data1),
                          dds_next_addr.eq(arg.addr2),
                          dds_next_data.eq(arg.data2),
-                         dds_data_oe.eq(~arg.read)]
+                         dds_data_oe.eq(~arg.read),
+                         dds_prev_data.eq(0)]
 
         return m
