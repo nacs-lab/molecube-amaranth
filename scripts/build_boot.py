@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
+from molecube_amaranth.build import load_var
+
 from xilinx_ps_config.zynq_config import ZynqConfig
 from xilinx_ps_config.zynq_fsbl import gen_board_files
 
-import sys
-import importlib.util
 import argparse
 from pathlib import Path
 import shutil
@@ -25,13 +25,7 @@ group.add_argument("--build_boot", action="store_true", help="Build boot.bin")
 parser.add_argument('--build_dir', help="Build directory", default="build_boot")
 args = parser.parse_args()
 
-config_path = args.config_file
-config_var = args.var
-
-config_spec = importlib.util.spec_from_file_location("config_module", config_path)
-config_module = importlib.util.module_from_spec(config_spec)
-config_spec.loader.exec_module(config_module)
-config = getattr(config_module, config_var)
+config = load_var(args.config_file, args.var)
 
 build_dir = Path(args.build_dir)
 boot_dir = Path(__file__).resolve().parent.parent / "boot"

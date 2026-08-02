@@ -7,6 +7,8 @@ from amaranth_zynq.platform import ZC702Platform
 from transactron import TransactronContextElaboratable
 from transactron.utils.gen_hacks import fixup_vivado_transparent_memories
 
+import importlib.util
+
 class BuildPlatform(ZC702Platform):
     def __init__(self, *args, **kws):
         super().__init__(*args, **kws)
@@ -51,3 +53,9 @@ phys_opt_design -directive AlternateReplication
     assert plat._molecube_vivado_fixedup
     if not do_build:
         plan.extract(build_dir)
+
+def load_var(path, var):
+    spec = importlib.util.spec_from_file_location("tmp_module", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, var)
