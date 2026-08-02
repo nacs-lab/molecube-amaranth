@@ -7,3 +7,6 @@
 [submodule "boot/u-boot"]
 	path = boot/u-boot
 	url = https://github.com/Xilinx/u-boot-xlnx
+[submodule "boot/bootgen"]
+	path = boot/bootgen
+	url = https://github.com/Xilinx/bootgen
