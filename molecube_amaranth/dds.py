@@ -370,7 +370,8 @@ class DDSController(Elaboratable):
                 m.d.sync += [dds_wr.eq(0),
                              dds_rd.eq(0),
                              dds_reset.eq(0),
-                             self.busy.eq(~hold_end)]
+                             self.busy.eq(~hold_end),
+                             dds_prev_data.eq(0)]
 
         @def_method(m, self.set, combiner=oring_combiner, nonexclusive=True)
         def _(arg):
@@ -387,7 +388,6 @@ class DDSController(Elaboratable):
                          dds_data_out.eq(arg.data1),
                          dds_next_addr.eq(arg.addr2),
                          dds_next_data.eq(arg.data2),
-                         dds_data_oe.eq(~arg.read),
-                         dds_prev_data.eq(0)]
+                         dds_data_oe.eq(~arg.read)]
 
         return m

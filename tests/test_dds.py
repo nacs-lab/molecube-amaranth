@@ -354,3 +354,66 @@ class TestDDS(TestCaseWithSimulator):
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
+
+    @pytest.mark.parametrize("asu", [0, 2])
+    @pytest.mark.parametrize("rdl", [0, 2])
+    @pytest.mark.parametrize("rdhoz", [0, 2])
+    def test_get_mixed_bytes(self, asu, rdl, rdhoz):
+        circ = DDSControllerTester()
+
+        async def f(sim):
+            sim.set(circ.csr.dds_read_asu, asu)
+            sim.set(circ.csr.dds_read_rdl, rdl)
+            sim.set(circ.csr.dds_read_rdhoz, rdhoz)
+            await sim.tick()
+            targets = set()
+            for _ in range(10):
+                id = random.randint(0, 10)
+                addr = random.randrange(1, 0x7e, 4)
+                data = random.randint(0, 0xffff_ffff)
+
+                dummy_result = random.randint(0, 0xffff_ffff)
+                await circ.fifo.write.call(sim, data=dummy_result)
+
+                await circ.get_four_bytes.call(sim, id=id, addr=addr)
+
+                await circ.check_read2(sim, id, addr, data)
+                targets.add((id, addr >> 1))
+                targets.add((id, (addr >> 1) + 1))
+
+                dummy_result2 = random.randint(0, 0xffff_ffff)
+                await circ.fifo.write.call(sim, data=dummy_result2)
+
+                for _ in range(3):
+                    await sim.tick()
+
+                assert (await circ.fifo.read.call(sim)).data == dummy_result
+                assert (await circ.fifo.read.call(sim)).data == data
+                assert (await circ.fifo.read.call(sim)).data == dummy_result2
+
+                id = random.randint(0, 10)
+                addr = random.randrange(1, 0x80, 2)
+                data = random.randint(0, 0xffff)
+
+                dummy_result = random.randint(0, 0xffff_ffff)
+                await circ.fifo.write.call(sim, data=dummy_result)
+
+                await circ.get_two_bytes.call(sim, id=id, addr=addr)
+
+                await circ.check_read1(sim, id, addr, data)
+                targets.add((id, addr >> 1))
+
+                dummy_result2 = random.randint(0, 0xffff_ffff)
+                await circ.fifo.write.call(sim, data=dummy_result2)
+
+                for _ in range(3):
+                    await sim.tick()
+
+                assert (await circ.fifo.read.call(sim)).data == dummy_result
+                assert (await circ.fifo.read.call(sim)).data == data
+                assert (await circ.fifo.read.call(sim)).data == dummy_result2
+
+            await circ.check_cache(sim, sorted(targets))
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)
