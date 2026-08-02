@@ -6,15 +6,15 @@ from amaranth.lib.wiring import In, Out
 from amaranth.lib.cdc import ResetSynchronizer
 from amaranth_zynq.ps7 import PsZynq
 
-from molecube_amaranth.controllers import IOController
-from molecube_amaranth.csr import Registers
-from molecube_amaranth.dma import DMAController
-from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
-from molecube_amaranth.fifo import Fifos
-from molecube_amaranth.inst_runner import InstRunner, InstDispatcher
-from molecube_amaranth.inst_runner import InstRunner, InstConsumer
-from molecube_amaranth.interface import ControlInterface
-from molecube_amaranth.io import PulseIO
+from .controllers import IOController
+from .csr import Registers
+from .dma import DMAController
+from .dma_inst import DMAInstParser, DMAInstRunner
+from .fifo import Fifos
+from .inst_runner import InstRunner, InstDispatcher
+from .inst_runner import InstRunner, InstConsumer
+from .interface import ControlInterface
+from .io import PulseIO
 
 from transactron.lib import ConnectTrans
 

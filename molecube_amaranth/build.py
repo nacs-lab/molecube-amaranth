@@ -1,7 +1,9 @@
 #
 
-from molecube_amaranth.toplevel import TopLevel
+from .toplevel import TopLevel
+
 from amaranth_zynq.platform import ZC702Platform
+
 from transactron import TransactronContextElaboratable
 from transactron.utils.gen_hacks import fixup_vivado_transparent_memories
 

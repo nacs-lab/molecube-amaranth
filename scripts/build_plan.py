@@ -2,7 +2,6 @@
 
 from molecube_amaranth.build import build_zc702
 
-import sys
 import importlib.util
 import argparse
 
