@@ -9,6 +9,7 @@ from transactron.utils.gen_hacks import fixup_vivado_transparent_memories
 
 import importlib.util
 from pathlib import Path
+import os
 import shutil
 import subprocess
 
@@ -115,8 +116,35 @@ def build_boot(config, *, build_dir='build_boot'):
     build_fsbl(config, build_dir=build_dir)
     build_uboot(build_dir=build_dir)
     (boot_dir / "boot.bif").copy_into(build_dir)
-    subprocess.run(["bootgen", "-image", "boot.bif",
+    bootgen_path = ensure_bootgen(build_dir=build_dir)
+    subprocess.run([bootgen_path, "-image", "boot.bif",
                     "-w", "-o", "boot.bin"], cwd=build_dir)
+
+def build_bootgen(*, build_dir='build_boot'):
+    build_dir = Path(build_dir)
+
+    build_bootgen_dir = build_dir / "bootgen-build"
+    if build_bootgen_dir.exists() and build_bootgen_dir.is_dir():
+        shutil.rmtree(build_bootgen_dir)
+
+    proj_path = boot_dir / "bootgen"
+    shutil.copytree(proj_path, build_bootgen_dir, ignore=shutil.ignore_patterns('.git*'))
+
+    subprocess.run(["make", "CFLAGS=-Wno-incompatible-pointer-types",
+                    "CXXFLAGS=", "LDFLAGS=", "-C", build_bootgen_dir])
+    shutil.copy2(build_bootgen_dir / "build" / "bin" / "bootgen",
+                 build_dir / "bootgen")
+
+def ensure_bootgen(*, build_dir='build_boot'):
+    bootgen_path = shutil.which("bootgen")
+    if bootgen_path is not None:
+        return Path(bootgen_path)
+    build_dir = Path(build_dir)
+    bootgen_path = (build_dir / "bootgen").absolute()
+    if os.access(bootgen_path, os.X_OK):
+        return bootgen_path
+    build_bootgen(build_dir=build_dir)
+    return bootgen_path
 
 def load_var(path, var):
     spec = importlib.util.spec_from_file_location("tmp_module", path)
