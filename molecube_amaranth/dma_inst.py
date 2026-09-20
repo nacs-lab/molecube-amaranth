@@ -337,11 +337,11 @@ class DMAInstParser(Elaboratable):
 
             # We assume the bus_id bit are the same one for set 16 and set 32
             dds_bus_id = args.dds_set16.bus_id
-            dds16 = dds_req.write1(m, id=dds_set16.dds_id, addr1=dds_set16.addr[1:],
+            dds16 = dds_req.write1(m, id=dds_set16.dds_id, addr1=dds_set16.addr,
                                    data1=dds_set16.data, fud=dds_set16.fud)
-            dds32 = dds_req.write2(m, id=dds_set32.dds_id, addr1=dds_set32.addr[1:],
+            dds32 = dds_req.write2(m, id=dds_set32.dds_id, addr1=dds_set32.addr,
                                    data1=dds_set32.data[:16],
-                                   addr2=Cat(C(1, 1), dds_set32.addr[2:]),
+                                   addr2=Cat(C(1, 1), dds_set32.addr[1:]),
                                    data2=dds_set32.data[16:], fud=dds_set32.fud)
             dds16 = StructCat(DDSDecode, **dds16)
             dds32 = StructCat(DDSDecode, **dds32)

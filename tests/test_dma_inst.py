@@ -197,9 +197,9 @@ class ParserState:
                                   id=dds_id, hold_cnt=self.dds_write_adsu,
                                   hold_end=self.dds_write_adsu == 0,
                                   read=0, reset=0, fud=fud,
-                                  addr1=addr >> 1, data1=data)
+                                  addr1=addr, data1=data)
         self.checker_actions[name] = dict(type='set1', id=dds_id + bus_id * 11,
-                                          addr=addr, data=data, fud=fud)
+                                          addr=addr << 1, data=data, fud=fud)
 
     def add_ttl_set32(self, *, bank16_1, val1, bank16_2, val2):
         ttl_action = self.actions.get('ttl', {'mask': 0, 'val': 0})
@@ -216,10 +216,10 @@ class ParserState:
                                   id=dds_id, hold_cnt=self.dds_write_adsu,
                                   hold_end=self.dds_write_adsu == 0,
                                   read=0, reset=0, fud=fud,
-                                  addr1=addr >> 1, data1=data & 0xffff,
-                                  addr2=(addr >> 1) | 1, data2=data >> 16)
+                                  addr1=addr, data1=data & 0xffff,
+                                  addr2=addr | 1, data2=data >> 16)
         self.checker_actions[name] = dict(type='set2', id=dds_id + bus_id * 11,
-                                          addr=addr, data=data, fud=fud)
+                                          addr=addr << 1, data=data, fud=fud)
 
     def add_dac(self, *, id, cycle, clk_pha, clk_pol, data):
         self.actions['dac'] = {'id': id, 'cycle': cycle, 'clk_pha': clk_pha,
@@ -269,7 +269,7 @@ class ParserState:
 
     def rand_dds_set16(self, bus_id=range(1)):
         inst, kws = rand_inst(dds_set16_inst, bus_id=bus_id,
-                              addr=range(0, 1<<6, 2), dds_id=range(11))
+                              addr=range(0, 1<<6), dds_id=range(11))
         self.add_dds_set16(**kws)
         return inst
 
@@ -289,7 +289,7 @@ class ParserState:
 
     def rand_dds_set32(self, bus_id=range(1)):
         inst, kws = rand_inst(dds_set32_inst, bus_id=bus_id,
-                              addr=range(0, 1<<6, 4), dds_id=range(11))
+                              addr=range(0, 1<<6, 2), dds_id=range(11))
         self.add_dds_set32(**kws)
         return inst
 
