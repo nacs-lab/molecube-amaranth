@@ -119,13 +119,18 @@ class AXIReadStream(Elaboratable):
             read_iface.request(m, addr=Cat(C(0, self.align_width), addr))
 
         req_blocks = Signal(self.blocks_width)
-        with Transaction().body(m, ready=req_blocks != 0):
+        # Keep the request availability test off the counter's carry chain.
+        # This signal also drives the AXI request adaptor's wide buffer enable.
+        req_blocks_pending = Signal()
+        with Transaction().body(m, ready=req_blocks_pending):
             m.d.sync += req_blocks.eq(req_blocks - 1)
+            m.d.sync += req_blocks_pending.eq(req_blocks != 1)
             request(m, next_addr)
 
-        @def_method(m, self.queue, ready=req_blocks == 0)
+        @def_method(m, self.queue, ready=~req_blocks_pending)
         def _(addr, blocks):
             m.d.sync += req_blocks.eq(blocks)
+            m.d.sync += req_blocks_pending.eq(blocks != 0)
             count_keeper.add(m, blocks)
             request(m, addr[self.align_width:])
 
