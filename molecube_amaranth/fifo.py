@@ -191,6 +191,82 @@ class BufferedFifo(wiring.Component):
         return m
 
 
+class RegFifo(Elaboratable):
+    """Two-entry register FIFO with fully registered ready signals.
+
+    Unlike a transactron `Pipe` (whose `write.ready` depends combinationally on
+    `read.run`), both `read.ready` and `write.ready` here depend only on
+    registered state, so inserting one in a pipeline cuts the combinational
+    ready/run chain between the upstream and downstream stages while still
+    sustaining one transfer per cycle. Unlike `BasicFifo(depth=2)`, the storage
+    is flip-flops rather than LUTRAM.
+
+    Compatible with the transactron `ClearableConnector` protocol
+    (`read`, `write`, `clear`) so it can be used as a `PipelineBuilder`
+    forwarder (see `pipeline_regfifo`).
+    """
+    def __init__(self, layout, *, src_loc=0):
+        self.read = Method(o=layout)
+        self.write = Method(i=layout)
+        self.clear = Method()
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        head = Signal.like(self.read.data_out, reset_less=True)
+        tail = Signal.like(self.read.data_out, reset_less=True)
+        head_valid = Signal()
+        tail_valid = Signal()
+
+        @def_method(m, self.read, ready=head_valid)
+        def _():
+            return head
+
+        @def_method(m, self.write, ready=~tail_valid)
+        def _(arg):
+            pass
+
+        do_read = self.read.run
+        do_write = self.write.run
+        wdata = self.write.data_in
+
+        with m.If(do_read):
+            with m.If(tail_valid):
+                # Shift; a simultaneous write (if any) goes into the tail
+                m.d.sync += [head.eq(tail),
+                             tail.eq(wdata),
+                             tail_valid.eq(do_write)]
+            with m.Else():
+                # head is consumed; a simultaneous write refills it
+                m.d.sync += [head.eq(wdata),
+                             head_valid.eq(do_write)]
+        with m.Elif(do_write):
+            with m.If(head_valid):
+                m.d.sync += [tail.eq(wdata),
+                             tail_valid.eq(1)]
+            with m.Else():
+                m.d.sync += [head.eq(wdata),
+                             head_valid.eq(1)]
+
+        @def_method(m, self.clear, nonexclusive=True)
+        def _():
+            m.d.sync += [head_valid.eq(0),
+                         tail_valid.eq(0)]
+
+        return m
+
+
+def pipeline_regfifo(pipe):
+    """Insert a `RegFifo` after the current stage of a `PipelineBuilder`.
+
+    This is the flip-flop based counterpart of `PipelineBuilder.fifo(depth=2)`.
+    """
+    # PipelineBuilder only exposes BasicFifo through `fifo()`,
+    # so we set the pending forwarder factory directly.
+    if pipe._next_forwarder is not None:
+        raise RuntimeError("Fifo was added twice for the same stage")
+    pipe._next_forwarder = lambda layout: RegFifo(layout)
+
 class UpsizeFifo(Elaboratable):
     def __init__(self, *, width_in, width_out, depth):
         assert width_out % width_in == 0

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
 from .csr import Registers
-from .fifo import BufferedFifo
+from .fifo import BufferedFifo, pipeline_regfifo
 from .utils import xvalue, reg_chain
 
 def relaxed_read_shadow(m, reg):
@@ -353,6 +353,9 @@ class ControlInterface(Elaboratable):
                 m.d.av_comb += res.eq(xvalue(m, self.data_width))
             return dict(fifo_data=res)
 
+        # Cut the combinational ready chain of the long read pipeline
+        pipeline_regfifo(read_pipe)
+
         read_states = ReadStates()
 
         read_states.add_leaf(0x00, rd_ttl_hi(0))
@@ -456,6 +459,10 @@ class ControlInterface(Elaboratable):
                     idx_bit = getattr(arg, f'idx{value.bit}')
                     res[value.value] = Mux(idx_bit, v1, v0)
                 return res
+
+            # Cut the ready chain of the mux tree in the middle
+            if batch_id == len(batches) // 2 - 1:
+                pipeline_regfifo(read_pipe)
 
         m.submodules.read_rep_fifo = read_rep_fifo = BufferedFifo(
             [('data', self.data_width), ('resp', 2), ('id', self.id_width),

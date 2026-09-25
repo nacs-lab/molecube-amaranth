@@ -6,7 +6,7 @@ from amaranth.lib import io
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, SimpleTestCircuit
 
-from molecube_amaranth.fifo import CommandFifo, ResultFifo, DMACmdFifo, BufferedFifo, Fifos
+from molecube_amaranth.fifo import CommandFifo, ResultFifo, DMACmdFifo, BufferedFifo, Fifos, RegFifo
 
 import pytest
 import random
@@ -214,3 +214,58 @@ class TestFifos(TestCaseWithSimulator):
 
         with self.run_simulation(fifos) as sim:
             pass
+
+class TestRegFifo(TestCaseWithSimulator):
+    @pytest.mark.parametrize("wprob,rprob", [(1.0, 1.0), (0.3, 1.0), (1.0, 0.3), (0.5, 0.5)])
+    def test_reg_fifo(self, wprob, rprob):
+        fifo = RegFifo([('data', 32)])
+        circ = SimpleTestCircuit(fifo)
+
+        data_ins = [random.randint(0, 0xffff_ffff) for _ in range(300)]
+        data_outs = []
+
+        async def producer(sim):
+            for d in data_ins:
+                while random.random() > wprob:
+                    await sim.tick()
+                await circ.write.call(sim, data=d)
+
+        async def consumer(sim):
+            while len(data_outs) < len(data_ins):
+                while random.random() > rprob:
+                    await sim.tick()
+                res = await circ.read.call_try(sim)
+                if res is not None:
+                    data_outs.append(res.data)
+            assert data_outs == data_ins
+            for _ in range(5):
+                assert await circ.read.call_try(sim) is None
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
+
+    def test_reg_fifo_throughput(self):
+        fifo = RegFifo([('data', 32)])
+        circ = SimpleTestCircuit(fifo)
+
+        n = 200
+        data_ins = [random.randint(0, 0xffff_ffff) for _ in range(n)]
+
+        async def producer(sim):
+            for d in data_ins:
+                await circ.write.call(sim, data=d)
+
+        async def consumer(sim):
+            # First element appears one cycle after the write
+            res = await circ.read.call(sim)
+            assert res.data == data_ins[0]
+            for d in data_ins[1:]:
+                # Must sustain one element per cycle
+                res = await circ.read.call_try(sim)
+                assert res is not None
+                assert res.data == d
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
