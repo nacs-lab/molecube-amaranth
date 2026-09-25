@@ -465,9 +465,14 @@ class TestDMAController(TestCaseWithSimulator):
 
         assert len(write_data) == 2048
 
-        def test_inst(res):
+        def test_inst(res_inst):
             inst, mask = insts.pop(0)
-            assert inst == res.inst & mask
+            assert inst == res_inst & mask
+
+        def test_bundle(res):
+            test_inst(res.inst0)
+            if res.en1:
+                test_inst(res.inst1)
 
         async def f(sim):
             for i in range(128):
@@ -482,9 +487,11 @@ class TestDMAController(TestCaseWithSimulator):
             await circ.queue_cmd.call(sim, addr=0, blocks=7)
             await circ.queue_cmd.call(sim, addr=4096, blocks=7)
 
-            test_inst(await circ.read_inst.call(sim))
+            test_bundle(await circ.read_inst.call(sim))
             while insts:
-                test_inst(await circ.read_inst.call_try(sim))
+                res = await circ.read_inst.call_try(sim)
+                if res is not None:
+                    test_bundle(res)
 
             for _ in range(10):
                 assert await circ.read_inst.call_try(sim) is None

@@ -80,6 +80,26 @@ dds_set32_inst = def_inst(2, 2, [('bus_id', 1), ('dds_id', 4), ('fud', 1),
 dac_inst = def_inst(2, 3, [('id', 2), ('cycle', 9), ('clk_pha', 1), ('clk_pol', 1),
                            ('data', 18)])
 
+def is_wait_inst(inst):
+    return (inst >> 2) & 3 == 0
+
+async def send_insts(sim, circ, insts, pair_prob=0.7):
+    """Write the instructions as bundles of up to two instructions,
+    randomly pairing consecutive instructions when allowed."""
+    i = 0
+    while i < len(insts):
+        inst0 = insts[i]
+        if (i + 1 < len(insts) and random.random() < pair_prob and
+            not (is_wait_inst(inst0) and is_wait_inst(insts[i + 1]))):
+            inst1 = insts[i + 1]
+            i += 2
+            assert (await circ.write.call_try(sim, inst0=inst0, inst1=inst1,
+                                              en1=1)) is not None
+        else:
+            i += 1
+            assert (await circ.write.call_try(sim, inst0=inst0, inst1=0,
+                                              en1=0)) is not None
+
 def rand_inst(instf, **kw):
     spec = instf.inst_spec
     args = {}
@@ -330,8 +350,7 @@ class TestParser(TestCaseWithSimulator):
                                         state.rand_wait_trig))())
 
         async def producer(sim):
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             state.check_action(await circ.read.call(sim))
@@ -368,8 +387,7 @@ class TestParser(TestCaseWithSimulator):
 
         async def producer(sim):
             sim.set(circ.csr.dma_ttl_mask, mask)
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             while state.queue:
@@ -393,8 +411,7 @@ class TestParser(TestCaseWithSimulator):
                                         state.rand_wait_trig))())
 
         async def producer(sim):
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             while state.queue:
@@ -423,8 +440,7 @@ class TestParser(TestCaseWithSimulator):
             sim.set(circ.csr.dds_write_adsu, 7)
             for _ in range(3):
                 await sim.tick()
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             while state.queue:
@@ -448,8 +464,7 @@ class TestParser(TestCaseWithSimulator):
                                         state.rand_wait_trig))())
 
         async def producer(sim):
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             while state.queue:
@@ -485,12 +500,57 @@ class TestParser(TestCaseWithSimulator):
             sim.set(circ.csr.dma_ttl_mask, (1 << 56) - 1)
             for _ in range(3):
                 await sim.tick()
-            for inst in insts:
-                assert (await circ.write.call_try(sim, inst=inst)) is not None
+            await send_insts(sim, circ, insts)
 
         async def consumer(sim):
             while state.queue:
                 state.check_action(await circ.read.call(sim))
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
+
+
+    def test_throughput(self):
+        # Two instructions per cycle should be consumed
+        # when there are multiple output actions between waits.
+        circ = ParserTester()
+        state = ParserState()
+        state.ttl_mask = (1 << 56) - 1
+        state.dds_write_adsu = 7
+
+        insts = []
+        for _ in range(100):
+            for _ in range(random.randint(2, 6)):
+                insts.append(random.choice((state.rand_ttl_set4,
+                                            state.rand_ttl_set16,
+                                            state.rand_ttl_set32,
+                                            state.rand_clockout,
+                                            state.rand_dds_set16,
+                                            state.rand_dds_set32,
+                                            state.rand_dac))())
+            insts.append(random.choice((state.rand_wait1,
+                                        state.rand_wait2,
+                                        state.rand_wait_trig))())
+        nbundles = (len(insts) + 1) // 2
+
+        async def producer(sim):
+            sim.set(circ.csr.dds_write_adsu, 7)
+            sim.set(circ.csr.dma_ttl_mask, (1 << 56) - 1)
+            for _ in range(3):
+                await sim.tick()
+            # `send_insts` asserts that every bundle is accepted immediately
+            await send_insts(sim, circ, insts, pair_prob=1.0)
+
+        async def consumer(sim):
+            state.check_action(await circ.read.call(sim))
+            ncycles = 1
+            while state.queue:
+                req = await circ.read.call_try(sim)
+                ncycles += 1
+                if req is not None:
+                    state.check_action(req)
+            assert ncycles <= nbundles + 16
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)

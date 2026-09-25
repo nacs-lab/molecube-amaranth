@@ -9,7 +9,8 @@ from amaranth_axi.axitools import AXIMasterReadIFace
 from transactron import TModule, Transaction, Method, def_method
 
 from .fifo import BufferedFifo
-from .inst_cutter import InstCutter
+from .inst_cutter import InstCutter, INST_BUNDLE
+from .dma_inst import inst_pair_ok
 from .utils import oring_combiner, assign_xvalue, reg_chain
 
 class CountKeeper(Elaboratable):
@@ -152,7 +153,7 @@ class DMAController(Elaboratable):
         self.axi = axi
         self.csr = csr
         self.fifos = fifos
-        self.read_inst = Method(o=[('inst', 48)])
+        self.read_inst = Method(o=INST_BUNDLE)
         self.inst_started = Method()
         self.inst_stopped = Method()
         self.trig_timeout = Method()
@@ -216,7 +217,7 @@ class DMAController(Elaboratable):
         def _():
             m.d.sync += [trig_timeout.eq(1)]
 
-        m.submodules.inst_cutter = inst_cutter = InstCutter()
+        m.submodules.inst_cutter = inst_cutter = InstCutter(pair_ok=inst_pair_ok)
 
         with Transaction().body(m):
             rep = axi_stream.get(m)

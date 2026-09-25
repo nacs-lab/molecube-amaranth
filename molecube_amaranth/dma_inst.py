@@ -5,7 +5,7 @@ from amaranth.lib import enum
 from amaranth.lib.data import Struct, Union, ArrayLayout, View
 from amaranth.utils import ceil_log2
 
-from transactron import TModule, Transaction, Method
+from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder, Connect
 
 from amaranth_axi.utils import StructCat
@@ -13,8 +13,9 @@ from amaranth_axi.utils import StructCat
 from types import SimpleNamespace
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
-from .fifo import BufferedFifo
-from .utils import assign_xvalue, top_d
+from .fifo import BufferedFifo, pipeline_regfifo
+from .inst_cutter import INST_BUNDLE
+from .utils import assign_xvalue, xvalue, top_d
 from .trigger import TriggerController
 
 # Instruction format:
@@ -213,17 +214,33 @@ def _OutputAction(nttl):
 
     return OutputAction.as_shape()
 
-class DMAInstParser(Elaboratable):
+def is_wait_inst(inst):
+    """Whether a raw instruction is a wait (or wait_trig) instruction."""
+    return InstHead(inst[:4]).opcode == OpCode.WAIT1
+
+def inst_pair_ok(m, inst0, inst1):
+    """Pairing rule for the instruction cutter.
+
+    The parser emits at most one wait group per cycle,
+    so two waits cannot be processed together.
+    """
+    return ~(is_wait_inst(inst0) & is_wait_inst(inst1))
+
+INST_CLASSES = ('wait', 'clockout', 'ttl', 'dds0', 'dds1', 'dac')
+
+class DMAInstDecoder(Elaboratable):
+    """Decode a single instruction stream (one lane)."""
     def __init__(self, csr, nttl):
-        self.nttl = nttl
-        TTLDecode = _TTLDecode(nttl)
-        OutputAction = _OutputAction(nttl)
-        self.TTLDecode = TTLDecode
-        self.OutputAction = OutputAction
         self.csr = csr
-        self.write = Method(i=[('inst', 48)])
-        self.read = Method(o=[('is_trig', 1), ('wait', WaitAction),
-                              ('action', OutputAction)])
+        TTLDecode = _TTLDecode(nttl)
+        self.nttl = nttl
+        self.TTLDecode = TTLDecode
+        # `flag` is passed through unchanged
+        self.write = Method(i=[('inst', 48), ('flag', 1)])
+        self.read = Method(o=[('opcode', DecodedOpCode), ('trivial', TrivialDecode),
+                              ('wait', WaitDecode), ('ttl', TTLDecode),
+                              ('dds', DDSDecode), ('flag', 1)] +
+                           [(f'is_{name}', 1) for name in INST_CLASSES])
 
     def elaborate(self, plat):
         m = TModule()
@@ -352,9 +369,19 @@ class DMAInstParser(Elaboratable):
         def decode_trivial(args):
             return TrivialDecode(Signal.cast(args)[:TrivialDecode.as_shape().size])
 
-        @decode_pipe.stage(m, o=[('opcode', DecodedOpCode)])
+        @decode_pipe.stage(m, o=[('opcode', DecodedOpCode)] +
+                           [(f'is_{name}', 1) for name in INST_CLASSES])
         def decode_opcode(head, dds_bus_id):
             opcode = Signal(DecodedOpCode)
+            # One-hot instruction class flags for the merge stage
+            is_dds = head.opcode == OpCode.DDS_SET1
+            is_clockout = head.opcode == OpCode.CLOCKOUT
+            flags = dict(is_wait=head.opcode == OpCode.WAIT1,
+                         is_ttl=head.opcode == OpCode.TTL_SET4,
+                         is_dds0=is_dds & ~dds_bus_id,
+                         is_dds1=is_dds & dds_bus_id,
+                         is_clockout=is_clockout & ~head.len[1],
+                         is_dac=is_clockout & head.len[1])
             with m.Switch(head.opcode):
                 with m.Case(OpCode.WAIT1):
                     m.d.av_comb += opcode.eq(Mux(head.len[1], DecodedOpCode.WAIT_TRIG,
@@ -366,83 +393,154 @@ class DMAInstParser(Elaboratable):
                 with m.Case(OpCode.CLOCKOUT):
                     m.d.av_comb += opcode.eq(Mux(head.len[1], DecodedOpCode.DAC,
                                                  DecodedOpCode.CLOCKOUT))
-            return opcode
+            return dict(opcode=opcode, **flags)
 
-        decode_pipe.fifo(depth=2)
+        pipeline_regfifo(decode_pipe)
 
+        decode_pipe.add_external(self.read)
+
+        return m
+
+
+class DMAInstParser(Elaboratable):
+    """Parse the instruction stream into output action groups.
+
+    Up to two instructions (a bundle from the `InstCutter`) are consumed
+    per cycle. Consecutive output actions are accumulated into a cache
+    and each wait instruction emits the accumulated actions together with
+    the wait. A bundle must not contain two waits (see `inst_pair_ok`).
+    """
+    def __init__(self, csr, nttl):
+        self.nttl = nttl
+        TTLDecode = _TTLDecode(nttl)
+        OutputAction = _OutputAction(nttl)
+        self.TTLDecode = TTLDecode
+        self.OutputAction = OutputAction
+        self.csr = csr
+        self.write = Method(i=INST_BUNDLE)
+        self.read = Method(o=[('is_trig', 1), ('wait', WaitAction),
+                              ('action', OutputAction)])
+
+    def elaborate(self, plat):
+        m = TModule()
+
+        TTLDecode = self.TTLDecode
         OutputAction = self.OutputAction
+
+        m.submodules.dec0 = dec0 = DMAInstDecoder(self.csr, self.nttl)
+        m.submodules.dec1 = dec1 = DMAInstDecoder(self.csr, self.nttl)
+
+        # Both lanes are always written so the two decode pipelines stay in lockstep.
+        # Lane 0 carries the flag telling whether lane 1 holds a valid instruction.
+        @def_method(m, self.write)
+        def _(inst0, inst1, en1):
+            dec0.write(m, inst=inst0, flag=en1)
+            dec1.write(m, inst=inst1, flag=0)
 
         m.submodules.decoded_fifo = decoded_fifo = BufferedFifo([('is_trig', 1),
                                                                  ('wait', WaitAction),
                                                                  ('action', OutputAction)],
                                                                 256)
 
-        @decode_pipe.stage(m, o=[('en', 1), ('is_trig', 1), ('wait', WaitAction),
-                                 ('action', OutputAction)])
-        def _(opcode, trivial, wait, ttl, dds):
-            en = Signal()
+        m.submodules.out_pipe = out_pipe = PipelineBuilder()
 
-            g = SimpleNamespace()
-            g.clockout_en = Signal()
-            g.clockout = Signal(ClockOutDecode, reset_less=True)
-            g.ttl_en = Signal()
-            g.ttl = Signal(TTLDecode, reset_less=True)
-            g.dds0_en = Signal()
-            g.dds0 = Signal(DDSDecode, reset_less=True)
-            g.dds1_en = Signal()
-            g.dds1 = Signal(DDSDecode, reset_less=True)
-            g.dac_en = Signal()
-            g.dac = Signal(DACDecode, reset_less=True)
+        # Accumulated output actions since the last wait
+        g = SimpleNamespace()
+        g.clockout_en = Signal()
+        g.clockout = Signal(ClockOutDecode, reset_less=True)
+        g.ttl_en = Signal()
+        g.ttl = Signal(TTLDecode, reset_less=True)
+        g.dds0_en = Signal()
+        g.dds0 = Signal(DDSDecode, reset_less=True)
+        g.dds1_en = Signal()
+        g.dds1 = Signal(DDSDecode, reset_less=True)
+        g.dac_en = Signal()
+        g.dac = Signal(DACDecode, reset_less=True)
 
-            output_cache = Signal(OutputAction)
-            for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
-                name_en = f'{name}_en'
-                m.d.top_comb += [
-                    getattr(output_cache, name).eq(getattr(g, name)),
-                    getattr(output_cache, name_en).eq(getattr(g, name_en))]
+        action_names = ('clockout', 'ttl', 'dds0', 'dds1', 'dac')
 
+        def action_payload(d, name):
+            if name == 'clockout':
+                return d.trivial.clock_out
+            elif name == 'ttl':
+                return d.ttl
+            elif name == 'dac':
+                return d.trivial.dac
+            return d.dds
+
+        def apply_lane(d, valid, base):
+            # Merge the action from a decoded lane into the (en, value) cache `base`
+            res = {}
+            for name in action_names:
+                base_en, base_val = base[name]
+                hit = Signal(name=f'{name}_hit')
+                m.d.top_comb += hit.eq(valid & getattr(d, f'is_{name}'))
+                new_val = Value.cast(action_payload(d, name))
+                if name == 'ttl':
+                    # TTL sets are accumulated
+                    new_val = Mux(base_en, Value.cast(base_val) | new_val, new_val)
+                val = Signal.like(base_val, name=f'{name}_val')
+                m.d.top_comb += val.eq(Mux(hit, new_val, Value.cast(base_val)))
+                res[name] = (base_en | hit, val)
+            return res
+
+        def empty_cache():
+            return {name: (C(0), xvalue(m, Shape.cast(getattr(g, name).shape()).width))
+                    for name in action_names}
+
+        def output_action(cache):
+            action = Signal(OutputAction)
+            for name in action_names:
+                en, val = cache[name]
+                m.d.top_comb += [getattr(action, f'{name}_en').eq(en),
+                                 getattr(action, name).eq(val)]
+            return action
+
+        @out_pipe.stage(m, o=[('en', 1), ('is_trig', 1), ('wait', WaitAction),
+                              ('action', OutputAction)])
+        def _():
+            d0 = dec0.read(m)
+            d1 = dec1.read(m)
+            en1 = d0.flag
+
+            wait0 = Signal()
+            wait1 = Signal()
+            m.d.top_comb += [wait0.eq(d0.is_wait),
+                             wait1.eq(en1 & d1.is_wait)]
+
+            cache = {name: (getattr(g, f'{name}_en'), getattr(g, name))
+                     for name in action_names}
+            # Cache after lane 0 (if it is an action)
+            cache0 = apply_lane(d0, ~wait0, cache)
+            # If lane 0 is a wait, it emits the cache and lane 1 starts a new group.
+            # Otherwise lane 1 (if a wait) emits the cache including lane 0.
+            emitted = {name: (Mux(wait0, cache[name][0], cache0[name][0]),
+                              Mux(wait0, Value.cast(cache[name][1]),
+                                  Value.cast(cache0[name][1])))
+                       for name in action_names}
+            empty = empty_cache()
+            base1 = {name: (Mux(wait0, empty[name][0], cache0[name][0]),
+                            Mux(wait0, empty[name][1], Value.cast(cache0[name][1])))
+                     for name in action_names}
+            cache1 = apply_lane(d1, en1, base1)
+            for name in action_names:
+                m.d.sync += [getattr(g, f'{name}_en').eq(Mux(wait1, 0, cache1[name][0])),
+                             getattr(g, name).eq(Mux(wait1, empty[name][1],
+                                                     cache1[name][1]))]
+
+            # The wait of the emitting lane
+            wait_opcode = Mux(wait0, Value.cast(d0.opcode), Value.cast(d1.opcode))
+            is_trig = wait_opcode[0]
             wait_action = Signal(WaitAction)
-
-            # Only valid if the opcode is actually wait or wait_trig
-            is_trig = Value.cast(opcode)[0]
-            m.d.av_comb += wait_action.wait_trig.eq(trivial.wait_trig)
+            m.d.av_comb += wait_action.wait_trig.eq(Mux(wait0, d0.trivial.wait_trig,
+                                                        d1.trivial.wait_trig))
             with m.If(~is_trig):
-                m.d.av_comb += wait_action.wait.eq(wait)
+                m.d.av_comb += wait_action.wait.eq(Mux(wait0, d0.wait, d1.wait))
 
-            with m.Switch(opcode):
-                with m.Case(DecodedOpCode.WAIT, DecodedOpCode.WAIT_TRIG):
-                    m.d.av_comb += en.eq(1)
-                    for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
-                        assign_xvalue(m, getattr(g, name))
-                        m.d.sync += getattr(g, f'{name}_en').eq(0)
-                with m.Case(DecodedOpCode.CLOCKOUT):
-                    m.d.sync += [g.clockout_en.eq(1),
-                                 g.clockout.eq(trivial.clock_out)]
-                with m.Case(DecodedOpCode.TTL):
-                    cache_ttl = Signal.cast(g.ttl)
-                    cmd_ttl = Signal.cast(ttl)
-                    m.d.sync += [g.ttl_en.eq(1),
-                                 cache_ttl.eq(Mux(g.ttl_en,
-                                                  cache_ttl | cmd_ttl, cmd_ttl))]
-                with m.Case(DecodedOpCode.DDS0):
-                    m.d.sync += [g.dds0_en.eq(1),
-                                 g.dds0.eq(dds)]
-                with m.Case(DecodedOpCode.DDS1):
-                    m.d.sync += [g.dds1_en.eq(1),
-                                 g.dds1.eq(dds)]
-                with m.Case(DecodedOpCode.DAC):
-                    m.d.sync += [g.dac_en.eq(1),
-                                 g.dac.eq(trivial.dac)]
-                with m.Default():
-                    for name in ('clockout', 'ttl', 'dds0', 'dds1', 'dac'):
-                        name_en = f'{name}_en'
-                        assign_xvalue(m, getattr(g, name))
-                        assign_xvalue(m, getattr(g, name_en))
+            return dict(en=wait0 | wait1, is_trig=is_trig, wait=wait_action,
+                        action=output_action(emitted))
 
-            return dict(en=en, is_trig=is_trig, wait=wait_action,
-                        action=output_cache)
-
-        @decode_pipe.stage(m)
+        @out_pipe.stage(m)
         def _(en, is_trig, wait, action):
             with m.If(en):
                 decoded_fifo.write(m, is_trig=is_trig, wait=wait, action=action)
