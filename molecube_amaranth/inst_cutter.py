@@ -48,7 +48,6 @@ class InstCutter(Elaboratable):
         assign_xvalue(m, inst, domain='av_comb')
 
         def full_undef():
-            assign_xvalue(m, buff_len)
             assign_xvalue(m, inst_en, domain='av_comb')
 
         def assign_inst(inst, data):
@@ -57,18 +56,23 @@ class InstCutter(Elaboratable):
             assert ldata <= linst
             m.d.av_comb += inst.eq(Cat(data, xvalue(m, linst - ldata)))
 
-        def assign_len(l):
-            assert l <= 6
-            m.d.sync += buff_len.eq(l)
-
         def parsed_inst(data, linst):
             ldata = len(data) // 16
             if ldata >= linst:
-                assign_len(ldata - linst)
                 assign_inst(inst, data[:16 * linst])
             else:
                 m.d.av_comb += inst_en.eq(0)
-                assign_len(ldata)
+
+        def parse_len(result, data, ldata):
+            with m.Switch(data[:2]):
+                with m.Case(0):
+                    m.d.av_comb += result.eq(ldata - 1)
+                with m.Case(1):
+                    m.d.av_comb += result.eq(ldata - 2 if ldata >= 2 else ldata)
+                with m.Case(2):
+                    m.d.av_comb += result.eq(ldata - 3 if ldata >= 3 else ldata)
+                with m.Default():
+                    assign_xvalue(m, result, domain='av_comb')
 
         def parse(data):
             with m.Switch(data[:2]):
@@ -93,6 +97,39 @@ class InstCutter(Elaboratable):
             with in_trans.body(m, ready=~buff_len[2]):
                 full_data = Cat(buff, data_conn.read(m))
 
+            len_with_input = Signal.like(buff_len)
+            len_without_input = Signal.like(buff_len)
+            with m.Switch(buff_len[:2]):
+                with m.Case(0):
+                    parse_len(len_with_input, full_data[16 * 6:], 4)
+                with m.Case(1):
+                    parse_len(len_with_input, full_data[16 * 5:], 5)
+                with m.Case(2):
+                    parse_len(len_with_input, full_data[16 * 4:], 6)
+                with m.Case(3):
+                    parse_len(len_with_input, full_data[16 * 3:], 7)
+
+            with m.Switch(buff_len):
+                with m.Case(0):
+                    m.d.av_comb += len_without_input.eq(0)
+                with m.Case(1):
+                    parse_len(len_without_input, buff[16 * 5:], 1)
+                with m.Case(2):
+                    parse_len(len_without_input, buff[16 * 4:], 2)
+                with m.Case(3):
+                    parse_len(len_without_input, buff[16 * 3:], 3)
+                with m.Case(4):
+                    parse_len(len_without_input, buff[16 * 2:], 4)
+                with m.Case(5):
+                    parse_len(len_without_input, buff[16 * 1:], 5)
+                with m.Case(6):
+                    parse_len(len_without_input, buff, 6)
+                with m.Default():
+                    assign_xvalue(m, len_without_input, domain='av_comb')
+
+            m.d.sync += buff_len.eq(Mux(in_trans.run, len_with_input,
+                                        len_without_input))
+
             with m.If(in_trans.run):
                 m.d.sync += buff.eq(full_data[16 * 4:])
 
@@ -109,7 +146,6 @@ class InstCutter(Elaboratable):
                 with m.Switch(buff_len):
                     with m.Case(0):
                         m.d.av_comb += inst_en.eq(0)
-                        assign_len(0)
                     with m.Case(1):
                         parse(buff[16 * 5:])
                     with m.Case(2):
