@@ -211,6 +211,8 @@ class ControlInterface(Elaboratable):
         start_write = write_pipe.create_external(i=[('idx', self.valid_width - 2),
                                                     ('data', self.data_width)],
                                                  o=[])
+        # Break the register-write backpressure path to the AXI write buffer.
+        write_pipe.fifo(depth=2)
 
         @write_pipe.stage(m)
         def _(idx, data):
