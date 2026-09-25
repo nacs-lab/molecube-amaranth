@@ -268,25 +268,27 @@ class DMAInstDecoder(Elaboratable):
 
         decode_pipe.add_external(self.write)
 
+        # Independent parts of the decoding are done in the same stages
+        # to keep the latency down to the longest (TTL) dependency chain.
+
         @decode_pipe.stage(m, o=[('head', InstHead), ('args', InstArgs)])
         def _(inst):
             return dict(head=InstHead(inst[:4]),
                         args=InstArgs(inst[4:]))
 
-        @decode_pipe.stage(m, o=[('wait1', WaitDecode), ('wait2', WaitDecode)])
-        def decode_wait_1(args):
-            return dict(wait1=StructCat(WaitDecode, cycle=args.wait1.cycle,
-                                        is0=args.wait1.cycle == 0),
-                        wait2=StructCat(WaitDecode, cycle=args.wait2.cycle,
-                                        is0=args.wait2.cycle == 0))
+        @decode_pipe.stage(m, o=[('wait1', WaitDecode), ('wait2', WaitDecode),
+                                 ('ttl4', TTLDecode), ('ttl16', TTLDecode),
+                                 ('ttl32', TTLDecode),
+                                 ('dds', DDSDecode), ('dds_bus_id', 1),
+                                 ('trivial', TrivialDecode)])
+        def decode_1(head, args):
+            ## Wait
+            wait1 = StructCat(WaitDecode, cycle=args.wait1.cycle,
+                              is0=args.wait1.cycle == 0)
+            wait2 = StructCat(WaitDecode, cycle=args.wait2.cycle,
+                              is0=args.wait2.cycle == 0)
 
-        @decode_pipe.stage(m, o=[('wait', WaitDecode)])
-        def decode_wait_2(head, wait1, wait2):
-            return WaitDecode(Mux(head.len[0], wait2, wait1))
-
-        @decode_pipe.stage(m, o=[('ttl4', TTLDecode), ('ttl16', TTLDecode),
-                                 ('ttl32', TTLDecode)])
-        def decode_ttl_1(args):
+            ## TTL, first bank
             ttl4 = Signal(TTLDecode)
             ttl16 = Signal(TTLDecode)
             ttl32 = Signal(TTLDecode)
@@ -309,10 +311,39 @@ class DMAInstDecoder(Elaboratable):
             m.d.top_comb += [bank32_16[ttl32_bank16_1].eq(args.ttl_set32.val1),
                              mask32_16[ttl32_bank16_1].eq(~C(0, 16))]
 
-            return dict(ttl4=ttl4, ttl16=ttl16, ttl32=ttl32)
+            ## DDS
+            dds_set16 = args.dds_set16
+            dds_set32 = args.dds_set32
 
-        @decode_pipe.stage(m, o=[('ttl16', TTLDecode), ('ttl32', TTLDecode)])
-        def decode_ttl_2(args, ttl16, ttl32):
+            # We assume the bus_id bit are the same one for set 16 and set 32
+            dds_bus_id = args.dds_set16.bus_id
+            dds16 = dds_req.write1(m, id=dds_set16.dds_id, addr1=dds_set16.addr,
+                                   data1=dds_set16.data, fud=dds_set16.fud)
+            dds32 = dds_req.write2(m, id=dds_set32.dds_id, addr1=dds_set32.addr,
+                                   data1=dds_set32.data[:16],
+                                   addr2=Cat(C(1, 1), dds_set32.addr[1:]),
+                                   data2=dds_set32.data[16:], fud=dds_set32.fud)
+            dds16 = StructCat(DDSDecode, **dds16)
+            dds32 = StructCat(DDSDecode, **dds32)
+
+            ## Trivial (wait_trig, clockout, dac)
+            trivial = TrivialDecode(Signal.cast(args)[:TrivialDecode.as_shape().size])
+
+            return dict(wait1=wait1, wait2=wait2,
+                        ttl4=ttl4, ttl16=ttl16, ttl32=ttl32,
+                        dds_bus_id=dds_bus_id,
+                        dds=DDSDecode(Mux(head.len[1], dds32, dds16)),
+                        trivial=trivial)
+
+        @decode_pipe.stage(m, o=[('wait', WaitDecode),
+                                 ('ttl16', TTLDecode), ('ttl32', TTLDecode),
+                                 ('opcode', DecodedOpCode)] +
+                           [(f'is_{name}', 1) for name in INST_CLASSES])
+        def decode_2(head, args, wait1, wait2, ttl16, ttl32, dds_bus_id):
+            ## Wait
+            wait = WaitDecode(Mux(head.len[0], wait2, wait1))
+
+            ## TTL, second bank
             _ttl16 = Signal(TTLDecode)
             _ttl32 = Signal(TTLDecode)
             m.d.top_comb += [_ttl16.eq(ttl16), _ttl32.eq(ttl32)]
@@ -331,47 +362,7 @@ class DMAInstDecoder(Elaboratable):
             m.d.top_comb += [bank32_16[ttl32_bank16_2].eq(args.ttl_set32.val2),
                              mask32_16[ttl32_bank16_2].eq(~C(0, 16))]
 
-            return dict(ttl16=ttl16, ttl32=ttl32)
-
-        @decode_pipe.stage(m, o=[('ttl16', TTLDecode)])
-        def decode_ttl_3(head, ttl4, ttl16):
-            return TTLDecode(Mux(head.len[0], ttl16, ttl4))
-
-        @decode_pipe.stage(m, o=[('ttl', TTLDecode)])
-        def decode_ttl_4(head, ttl16, ttl32):
-            return TTLDecode(Mux(head.len[1], ttl32, ttl16))
-
-        @decode_pipe.stage(m, o=[('ttl', TTLDecode)])
-        def decode_ttl_5(head, ttl):
-            # The user should not specify any value outside of the mask that are on
-            # so we don't need to mask the value, only the mask
-            return StructCat(TTLDecode, val=ttl.val, mask=ttl.mask & ttl_mask)
-
-        @decode_pipe.stage(m, o=[('dds', DDSDecode), ('dds_bus_id', 1)])
-        def decode_dds(head, args):
-            dds_set16 = args.dds_set16
-            dds_set32 = args.dds_set32
-
-            # We assume the bus_id bit are the same one for set 16 and set 32
-            dds_bus_id = args.dds_set16.bus_id
-            dds16 = dds_req.write1(m, id=dds_set16.dds_id, addr1=dds_set16.addr,
-                                   data1=dds_set16.data, fud=dds_set16.fud)
-            dds32 = dds_req.write2(m, id=dds_set32.dds_id, addr1=dds_set32.addr,
-                                   data1=dds_set32.data[:16],
-                                   addr2=Cat(C(1, 1), dds_set32.addr[1:]),
-                                   data2=dds_set32.data[16:], fud=dds_set32.fud)
-            dds16 = StructCat(DDSDecode, **dds16)
-            dds32 = StructCat(DDSDecode, **dds32)
-            return dict(dds_bus_id=dds_bus_id,
-                        dds=DDSDecode(Mux(head.len[1], dds32, dds16)))
-
-        @decode_pipe.stage(m, o=[('trivial', TrivialDecode)])
-        def decode_trivial(args):
-            return TrivialDecode(Signal.cast(args)[:TrivialDecode.as_shape().size])
-
-        @decode_pipe.stage(m, o=[('opcode', DecodedOpCode)] +
-                           [(f'is_{name}', 1) for name in INST_CLASSES])
-        def decode_opcode(head, dds_bus_id):
+            ## Opcode
             opcode = Signal(DecodedOpCode)
             # One-hot instruction class flags for the merge stage
             is_dds = head.opcode == OpCode.DDS_SET1
@@ -393,7 +384,27 @@ class DMAInstDecoder(Elaboratable):
                 with m.Case(OpCode.CLOCKOUT):
                     m.d.av_comb += opcode.eq(Mux(head.len[1], DecodedOpCode.DAC,
                                                  DecodedOpCode.CLOCKOUT))
-            return dict(opcode=opcode, **flags)
+
+            return dict(wait=wait, ttl16=ttl16, ttl32=ttl32, opcode=opcode, **flags)
+
+        @decode_pipe.stage(m, o=[('ttl', TTLDecode)])
+        def decode_ttl_select(head, ttl4, ttl16, ttl32):
+            # 3:1 mux on the instruction length
+            ttl = Signal(TTLDecode)
+            with m.Switch(head.len):
+                with m.Case(0):
+                    m.d.av_comb += ttl.eq(ttl4)
+                with m.Case(1):
+                    m.d.av_comb += ttl.eq(ttl16)
+                with m.Default():
+                    m.d.av_comb += ttl.eq(ttl32)
+            return ttl
+
+        @decode_pipe.stage(m, o=[('ttl', TTLDecode)])
+        def decode_ttl_mask(ttl):
+            # The user should not specify any value outside of the mask that are on
+            # so we don't need to mask the value, only the mask
+            return StructCat(TTLDecode, val=ttl.val, mask=ttl.mask & ttl_mask)
 
         pipeline_regfifo(decode_pipe)
 

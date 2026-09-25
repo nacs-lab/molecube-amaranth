@@ -557,6 +557,24 @@ class TestParser(TestCaseWithSimulator):
             sim.add_testbench(consumer)
 
 
+    def test_latency(self):
+        # Decode latency from the write of a bundle to the read of its group
+        circ = ParserTester()
+        state = ParserState()
+        inst = state.rand_wait1()
+
+        async def f(sim):
+            await circ.write.call(sim, inst0=inst, inst1=0, en1=0)
+            ncycles = 1
+            while (req := await circ.read.call_try(sim)) is None:
+                ncycles += 1
+            state.check_action(req)
+            assert ncycles <= 11
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(f)
+
+
 def config(*, spi=False, clock_shift=1):
     if spi:
         kws = dict(SPI_MOSI=sma_pin(1, 1),
