@@ -8,6 +8,7 @@ from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
+from .fifo import pipeline_regfifo
 from .utils import assign_xvalue, xvalue, top_d
 
 def single_cycle(m, en):
@@ -273,13 +274,13 @@ class InstRunner(Elaboratable):
                         clockout=clockout_div, spi=spi,
                         time_check=inst.time_check, timer=timer, timer_end=timer_end)
 
-        decode_pipe.fifo(depth=2)
+        pipeline_regfifo(decode_pipe)
 
         @decode_pipe.stage(m, ready=force_release | ~pulse_hold)
         def _():
             pass
 
-        decode_pipe.fifo(depth=2)
+        pipeline_regfifo(decode_pipe)
 
         read_decoded = decode_pipe.create_external(o=DECODED_INST, i=[])
 

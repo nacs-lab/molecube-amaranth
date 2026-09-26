@@ -12,7 +12,6 @@ from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
 
 from .dds import SET_ARG as DDS_SET_ARG
-from .inst_runner import SPI_DECODE0 as SPI_ARG
 from .utils import oring_combiner
 
 def _incr(signal, modulo):
@@ -387,6 +386,8 @@ class DMACmdFifo(Elaboratable):
 
 class Fifos(Elaboratable):
     def __init__(self, data_width, *, dma_addr_width=32, dma_align_width=12):
+        # Imported here since inst_runner uses the fifos of this module
+        from .inst_runner import SPI_DECODE0 as SPI_ARG
         self.cmd_fifo = CommandFifo(data_width, 4097)
         self.cmd2_fifo = CommandFifo(data_width, 17)
         self.spi_cmd_fifo = BufferedFifo(SPI_ARG, 8)
