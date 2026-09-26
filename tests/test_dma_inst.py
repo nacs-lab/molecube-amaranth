@@ -292,7 +292,7 @@ class ParserState:
         self.add_ttl_set16(bank8_1=bank8_1, val1=val1, bank8_2=bank8_2, val2=val2)
         return inst
 
-    def rand_dds_set16(self, bus_id=range(1)):
+    def rand_dds_set16(self, bus_id=range(2)):
         inst, kws = rand_inst(dds_set16_inst, bus_id=bus_id,
                               addr=range(0, 1<<6), dds_id=range(11))
         self.add_dds_set16(**kws)
@@ -312,11 +312,43 @@ class ParserState:
         self.add_ttl_set32(bank16_1=bank16_1, val1=val1, bank16_2=bank16_2, val2=val2)
         return inst
 
-    def rand_dds_set32(self, bus_id=range(1)):
+    def rand_dds_set32(self, bus_id=range(2)):
         inst, kws = rand_inst(dds_set32_inst, bus_id=bus_id,
                               addr=range(0, 1<<6, 2), dds_id=range(11))
         self.add_dds_set32(**kws)
         return inst
+
+    @staticmethod
+    def dds_bus_of(inst):
+        """The DDS bus of a generated dds_set16/dds_set32 instruction."""
+        return (inst >> 4) & 1
+
+    # Per bus wrappers so that the channel of a generator
+    # can be told from its name
+    def rand_dds0_set16(self):
+        return self.rand_dds_set16(bus_id=(0,))
+
+    def rand_dds0_set32(self):
+        return self.rand_dds_set32(bus_id=(0,))
+
+    def rand_dds1_set16(self):
+        return self.rand_dds_set16(bus_id=(1,))
+
+    def rand_dds1_set32(self):
+        return self.rand_dds_set32(bus_id=(1,))
+
+    def rand_action(self, gens, **kw):
+        """Generate a random action from `gens`, skipping the channels
+        that already have an action in the current wait group
+        (more than one action per channel between waits is undefined,
+        except for TTL which accumulates)."""
+        channels = {'rand_clockout': 'clockout', 'rand_dac': 'dac',
+                    'rand_dds_set16': 'dds0', 'rand_dds_set32': 'dds0',
+                    'rand_dds0_set16': 'dds0', 'rand_dds0_set32': 'dds0',
+                    'rand_dds1_set16': 'dds1', 'rand_dds1_set32': 'dds1'}
+        avail = [gen for gen in gens
+                 if channels.get(gen.__name__) not in self.actions]
+        return random.choice(avail)(**kw) if avail else None
 
     def rand_dac(self):
         inst, kws = rand_inst(dac_inst, cycle=range(1))
@@ -409,7 +441,7 @@ class TestParser(TestCaseWithSimulator):
 
         insts = []
         for _ in range(100):
-            for _ in range(random.randint(0, 4)):
+            for _ in range(random.randint(0, 1)):
                 insts.append(state.rand_clockout())
             insts.append(random.choice((state.rand_wait1,
                                         state.rand_wait2,
@@ -434,9 +466,16 @@ class TestParser(TestCaseWithSimulator):
 
         insts = []
         for _ in range(100):
-            for _ in range(random.randint(0, 4)):
+            ndds = random.randint(0, 2)
+            if ndds >= 1:
+                inst = random.choice((state.rand_dds_set16,
+                                      state.rand_dds_set32))()
+                insts.append(inst)
+            if ndds == 2:
+                # The second one has to be on the other bus
+                other = 1 - state.dds_bus_of(inst)
                 insts.append(random.choice((state.rand_dds_set16,
-                                            state.rand_dds_set32))())
+                                            state.rand_dds_set32))(bus_id=(other,)))
             insts.append(random.choice((state.rand_wait1,
                                         state.rand_wait2,
                                         state.rand_wait_trig))())
@@ -462,7 +501,7 @@ class TestParser(TestCaseWithSimulator):
 
         insts = []
         for _ in range(100):
-            for _ in range(random.randint(0, 2)):
+            for _ in range(random.randint(0, 1)):
                 insts.append(state.rand_dac())
             insts.append(random.choice((state.rand_wait1,
                                         state.rand_wait2,
@@ -488,16 +527,18 @@ class TestParser(TestCaseWithSimulator):
 
         insts = []
         for _ in range(300):
-            insts.append(random.choice((state.rand_wait1,
-                                        state.rand_wait2,
-                                        state.rand_wait_trig,
-                                        state.rand_ttl_set4,
-                                        state.rand_ttl_set16,
-                                        state.rand_ttl_set32,
-                                        state.rand_clockout,
-                                        state.rand_dds_set16,
-                                        state.rand_dds_set32,
-                                        state.rand_dac))())
+            insts.append(state.rand_action((state.rand_wait1,
+                                            state.rand_wait2,
+                                            state.rand_wait_trig,
+                                            state.rand_ttl_set4,
+                                            state.rand_ttl_set16,
+                                            state.rand_ttl_set32,
+                                            state.rand_clockout,
+                                            state.rand_dds0_set16,
+                                            state.rand_dds0_set32,
+                                            state.rand_dds1_set16,
+                                            state.rand_dds1_set32,
+                                            state.rand_dac)))
         insts.append(state.rand_wait1())
 
         async def producer(sim):
@@ -527,13 +568,15 @@ class TestParser(TestCaseWithSimulator):
         insts = []
         for _ in range(100):
             for _ in range(random.randint(2, 6)):
-                insts.append(random.choice((state.rand_ttl_set4,
-                                            state.rand_ttl_set16,
-                                            state.rand_ttl_set32,
-                                            state.rand_clockout,
-                                            state.rand_dds_set16,
-                                            state.rand_dds_set32,
-                                            state.rand_dac))())
+                insts.append(state.rand_action((state.rand_ttl_set4,
+                                                state.rand_ttl_set16,
+                                                state.rand_ttl_set32,
+                                                state.rand_clockout,
+                                                state.rand_dds0_set16,
+                                                state.rand_dds0_set32,
+                                                state.rand_dds1_set16,
+                                                state.rand_dds1_set32,
+                                                state.rand_dac)))
             insts.append(random.choice((state.rand_wait1,
                                         state.rand_wait2,
                                         state.rand_wait_trig))())
@@ -733,7 +776,7 @@ class TestRunner(TestCaseWithSimulator):
         state.ttl_mask = 0xff_ffff_ffff_ffff
 
         for _ in range(10):
-            for _ in range(random.randint(0, 2)):
+            for _ in range(random.randint(0, 1)):
                 state.rand_clockout(max_div=20)
             random.choice((state.rand_wait1,
                            state.rand_wait2))(min_cycle=60, max_cycle=200)
@@ -939,9 +982,15 @@ class TestRunner(TestCaseWithSimulator):
         state.ttl_mask = 0xff_ffff_ffff_ffff
 
         for _ in range(20):
-            for _ in range(random.randint(0, 4)):
+            ndds = random.randint(0, 2)
+            if ndds >= 1:
+                inst = random.choice((state.rand_dds_set16,
+                                      state.rand_dds_set32))()
+            if ndds == 2:
+                # The second one has to be on the other bus
+                other = 1 - state.dds_bus_of(inst)
                 random.choice((state.rand_dds_set16,
-                               state.rand_dds_set32))()
+                               state.rand_dds_set32))(bus_id=(other,))
             random.choice((state.rand_wait1,
                            state.rand_wait2))(min_cycle=80, max_cycle=120)
 
