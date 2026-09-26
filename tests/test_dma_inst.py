@@ -569,7 +569,7 @@ class TestParser(TestCaseWithSimulator):
             while (req := await circ.read.call_try(sim)) is None:
                 ncycles += 1
             state.check_action(req)
-            assert ncycles <= 11
+            assert ncycles <= 9
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
