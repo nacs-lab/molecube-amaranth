@@ -204,12 +204,21 @@ class RegFifo(Elaboratable):
     (`read`, `write`, `clear`) so it can be used as a `PipelineBuilder`
     forwarder (see `pipeline_regfifo`).
     """
-    def __init__(self, layout, *, src_loc=0):
+    def __init__(self, layout, *, pingpong=False, src_loc=0):
+        """
+        pingpong: use two slots written in turn and a read pointer selecting
+            the output instead of a head/tail pair. The data registers then
+            never depend on the read side (which helps when the reader's run
+            condition is on a long path), at the cost of an output mux.
+        """
         self.read = Method(o=layout)
         self.write = Method(i=layout)
         self.clear = Method()
+        self.pingpong = pingpong
 
     def elaborate(self, plat):
+        if self.pingpong:
+            return self._elaborate_pingpong()
         m = TModule()
 
         head = Signal.like(self.read.data_out, reset_less=True)
@@ -255,16 +264,53 @@ class RegFifo(Elaboratable):
         return m
 
 
-def pipeline_regfifo(pipe):
+    def _elaborate_pingpong(self):
+        m = TModule()
+
+        slots = [Signal.like(self.read.data_out, reset_less=True, name=f"slot{i}")
+                 for i in range(2)]
+        valids = [Signal(name=f"valid{i}") for i in range(2)]
+        wptr = Signal()
+        rptr = Signal()
+
+        @def_method(m, self.read, ready=valids[0] | valids[1])
+        def _():
+            m.d.sync += rptr.eq(~rptr)
+            for i in range(2):
+                with m.If(rptr == i):
+                    m.d.sync += valids[i].eq(0)
+            return View(self.read.layout_out,
+                        Mux(rptr, Value.cast(slots[1]), Value.cast(slots[0])))
+
+        @def_method(m, self.write, ready=~(valids[0] & valids[1]))
+        def _(arg):
+            m.d.sync += wptr.eq(~wptr)
+            for i in range(2):
+                with m.If(wptr == i):
+                    m.d.sync += [slots[i].eq(arg),
+                                 valids[i].eq(1)]
+
+        @def_method(m, self.clear, nonexclusive=True)
+        def _():
+            m.d.sync += [valids[0].eq(0),
+                         valids[1].eq(0),
+                         wptr.eq(0),
+                         rptr.eq(0)]
+
+        return m
+
+
+def pipeline_regfifo(pipe, **kws):
     """Insert a `RegFifo` after the current stage of a `PipelineBuilder`.
 
     This is the flip-flop based counterpart of `PipelineBuilder.fifo(depth=2)`.
+    Keyword arguments are passed to `RegFifo`.
     """
     # PipelineBuilder only exposes BasicFifo through `fifo()`,
     # so we set the pending forwarder factory directly.
     if pipe._next_forwarder is not None:
         raise RuntimeError("Fifo was added twice for the same stage")
-    pipe._next_forwarder = lambda layout: RegFifo(layout)
+    pipe._next_forwarder = lambda layout: RegFifo(layout, **kws)
 
 class UpsizeFifo(Elaboratable):
     def __init__(self, *, width_in, width_out, depth):

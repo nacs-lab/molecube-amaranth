@@ -216,9 +216,10 @@ class TestFifos(TestCaseWithSimulator):
             pass
 
 class TestRegFifo(TestCaseWithSimulator):
+    @pytest.mark.parametrize("pingpong", [False, True])
     @pytest.mark.parametrize("wprob,rprob", [(1.0, 1.0), (0.3, 1.0), (1.0, 0.3), (0.5, 0.5)])
-    def test_reg_fifo(self, wprob, rprob):
-        fifo = RegFifo([('data', 32)])
+    def test_reg_fifo(self, wprob, rprob, pingpong):
+        fifo = RegFifo([('data', 32)], pingpong=pingpong)
         circ = SimpleTestCircuit(fifo)
 
         data_ins = [random.randint(0, 0xffff_ffff) for _ in range(300)]
@@ -245,8 +246,9 @@ class TestRegFifo(TestCaseWithSimulator):
             sim.add_testbench(producer)
             sim.add_testbench(consumer)
 
-    def test_reg_fifo_throughput(self):
-        fifo = RegFifo([('data', 32)])
+    @pytest.mark.parametrize("pingpong", [False, True])
+    def test_reg_fifo_throughput(self, pingpong):
+        fifo = RegFifo([('data', 32)], pingpong=pingpong)
         circ = SimpleTestCircuit(fifo)
 
         n = 200
