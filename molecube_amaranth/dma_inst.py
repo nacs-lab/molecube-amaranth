@@ -232,16 +232,18 @@ INST_CLASSES = ('wait', 'clockout', 'ttl', 'dds0', 'dds1', 'dac')
 
 class DMAInstDecoder(Elaboratable):
     """Decode a single instruction stream (one lane)."""
-    def __init__(self, csr, nttl):
+    def __init__(self, csr, nttl, flags_shape=1):
+        """
+        flags_shape: shape of the `flags` field passed through the decoder unchanged
+        """
         self.csr = csr
         TTLDecode = _TTLDecode(nttl)
         self.nttl = nttl
         self.TTLDecode = TTLDecode
-        # `flag` is passed through unchanged
-        self.write = Method(i=[('inst', 48), ('flag', 1)])
+        self.write = Method(i=[('inst', 48), ('flags', flags_shape)])
         self.read = Method(o=[('opcode', DecodedOpCode), ('trivial', TrivialDecode),
                               ('wait', WaitDecode), ('ttl', TTLDecode),
-                              ('dds', DDSDecode), ('flag', 1)] +
+                              ('dds', DDSDecode), ('flags', flags_shape)] +
                            [(f'is_{name}', 1) for name in INST_CLASSES])
 
     def elaborate(self, plat):
@@ -440,8 +442,8 @@ class DMAInstParser(Elaboratable):
         # Lane 0 carries the flag telling whether lane 1 holds a valid instruction.
         @def_method(m, self.write)
         def _(inst0, inst1, en1):
-            dec0.write(m, inst=inst0, flag=en1)
-            dec1.write(m, inst=inst1, flag=0)
+            dec0.write(m, inst=inst0, flags=en1)
+            dec1.write(m, inst=inst1, flags=0)
 
         m.submodules.decoded_fifo = decoded_fifo = BufferedFifo([('is_trig', 1),
                                                                  ('wait', WaitAction),
@@ -507,7 +509,7 @@ class DMAInstParser(Elaboratable):
         def _():
             d0 = dec0.read(m)
             d1 = dec1.read(m)
-            en1 = d0.flag
+            en1 = d0.flags
 
             wait0 = Signal()
             wait1 = Signal()
