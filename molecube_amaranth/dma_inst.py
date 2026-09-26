@@ -168,8 +168,14 @@ class DecodedOpCode(enum.Enum, shape=3):
     DDS1 = 5
     DAC = 6
 
-class WaitDecode(Struct):
+class WaitRawDecode(Struct):
     cycle: 28
+    is0: 1
+
+class WaitDecode(Struct):
+    # The wait counter is loaded with `cycle - 1`, precomputed here
+    # to keep the subtraction off the runner's fetch path.
+    cycle_m1: 28
     is0: 1
 
 WaitTrigDecode = WaitTrigArgs
@@ -272,7 +278,7 @@ class DMAInstDecoder(Elaboratable):
         # to keep the latency down to the longest (TTL) dependency chain:
         # 1. everything except the second TTL bank and the final selections
         # 2. second TTL bank, wait select
-        # 3. TTL select and mask
+        # 3. TTL select and mask, wait counter value
         # Doing both TTL banks in the first stage saves another stage and
         # ~1000 FFs in total but is slightly worse for timing.
 
@@ -318,7 +324,7 @@ class DMAInstDecoder(Elaboratable):
             return StructCat(TTLDecode, val=ttl.val, mask=ttl.mask & ttl_mask)
 
         @decode_pipe.stage(m, o=[('head', InstHead), ('args', InstArgs),
-                                 ('wait1', WaitDecode), ('wait2', WaitDecode),
+                                 ('wait1', WaitRawDecode), ('wait2', WaitRawDecode),
                                  ('ttl4', TTLDecode), ('ttl16', TTLDecode),
                                  ('ttl32', TTLDecode),
                                  ('dds', DDSDecode), ('trivial', TrivialDecode),
@@ -329,9 +335,9 @@ class DMAInstDecoder(Elaboratable):
             args = InstArgs(inst[4:])
 
             ## Wait
-            wait1 = StructCat(WaitDecode, cycle=args.wait1.cycle,
+            wait1 = StructCat(WaitRawDecode, cycle=args.wait1.cycle,
                               is0=args.wait1.cycle == 0)
-            wait2 = StructCat(WaitDecode, cycle=args.wait2.cycle,
+            wait2 = StructCat(WaitRawDecode, cycle=args.wait2.cycle,
                               is0=args.wait2.cycle == 0)
 
             ## TTL
@@ -386,16 +392,18 @@ class DMAInstDecoder(Elaboratable):
                         dds=DDSDecode(Mux(head.len[1], dds32, dds16)),
                         trivial=trivial, opcode=opcode, **flags)
 
-        @decode_pipe.stage(m, o=[('wait', WaitDecode),
+        @decode_pipe.stage(m, o=[('wait_raw', WaitRawDecode),
                                  ('ttl16', TTLDecode), ('ttl32', TTLDecode)])
         def decode_2(head, args, wait1, wait2, ttl16, ttl32):
             ttl16, ttl32 = ttl_bank2(args, ttl16, ttl32)
-            return dict(wait=WaitDecode(Mux(head.len[0], wait2, wait1)),
+            return dict(wait_raw=WaitRawDecode(Mux(head.len[0], wait2, wait1)),
                         ttl16=ttl16, ttl32=ttl32)
 
-        @decode_pipe.stage(m, o=[('ttl', TTLDecode)])
-        def decode_3(head, ttl4, ttl16, ttl32):
-            return ttl_select(head, ttl4, ttl16, ttl32)
+        @decode_pipe.stage(m, o=[('ttl', TTLDecode), ('wait', WaitDecode)])
+        def decode_3(head, ttl4, ttl16, ttl32, wait_raw):
+            return dict(ttl=ttl_select(head, ttl4, ttl16, ttl32),
+                        wait=StructCat(WaitDecode, cycle_m1=(wait_raw.cycle - 1)[:28],
+                                       is0=wait_raw.is0))
 
         pipeline_regfifo(decode_pipe)
 
@@ -634,7 +642,7 @@ class DMAInstRunner(Elaboratable):
                                      trig_en.eq(1)]
                         top_d(m).sync += trig_action.eq(req.wait.wait_trig)
                     with m.Elif(~wait.is0):
-                        m.d.sync += [counter.eq(wait.cycle - 1),
+                        m.d.sync += [counter.eq(wait.cycle_m1),
                                      state.eq(State.WAIT)]
                 with m.If(~fetch_trans.run):
                     m.d.sync += idling.eq(1)

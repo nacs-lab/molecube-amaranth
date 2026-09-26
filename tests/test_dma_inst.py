@@ -126,9 +126,14 @@ class ParserState:
         self.ttl_mask = 0
         self.ttl_value = 0
 
+    @staticmethod
+    def hw_wait(wait):
+        # The hardware carries the counter load value instead of the cycle count
+        return {'cycle_m1': (wait['cycle'] - 1) % (1 << 28), 'is0': wait['is0']}
+
     def to_parsed_args(self, cmd):
         if 'wait' in cmd:
-            wait = {'wait': cmd['wait']}
+            wait = {'wait': self.hw_wait(cmd['wait'])}
             is_trig = 0
         else:
             wait = {'wait_trig': cmd['wait_trig']}
@@ -323,7 +328,7 @@ class ParserState:
         if 'wait' in sw_action:
             assert 'wait_trig' not in sw_action
             assert not hw_action.is_trig
-            check_fields(hw_action.wait.wait, sw_action['wait'])
+            check_fields(hw_action.wait.wait, self.hw_wait(sw_action['wait']))
         else:
             assert 'wait_trig' in sw_action
             assert hw_action.is_trig
