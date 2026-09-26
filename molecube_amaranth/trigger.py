@@ -31,10 +31,18 @@ class TriggerController(Elaboratable):
         trig_ttl = Signal(reset_less=True)
         m.d.sync += trig_ttl.eq(ttlin.bit_select(trig_chn, 1) ^ trig_edge)
 
-        wait_cycle = Signal(self.timer_width, reset_less=True)
+        # Count the elapsed cycles up and compare against the target
+        # instead of loading a down counter with the target: a non constant
+        # load gets merged into the counter's carry chain by synthesis and
+        # puts the setup condition in front of the whole chain, whereas the
+        # constant clear maps to the register reset pins.
+        # The compare result is registered so the timeout is one cycle
+        # after the count matches, the same as the old counter reaching 1.
+        elapsed = Signal(self.timer_width, reset_less=True)
+        target = Signal(self.timer_width, reset_less=True)
         wait_end = Signal(reset_less=True)
-        m.d.sync += [wait_end.eq(wait_cycle[1:] == 0),
-                     wait_cycle.eq(wait_cycle - 1)]
+        m.d.sync += [wait_end.eq(elapsed == target),
+                     elapsed.eq(elapsed + 1)]
 
         state = Signal(TrigState)
         trig_starting = Signal()
@@ -68,7 +76,8 @@ class TriggerController(Elaboratable):
         def _(chn, edge, cycle):
             m.d.sync += [trig_chn.eq(chn),
                          trig_edge.eq(edge),
-                         wait_cycle.eq(cycle),
+                         target.eq(cycle),
+                         elapsed.eq(1),
                          trig_starting.eq(1)]
 
         @def_method(m, self.wait, ready=trig_firing, nonexclusive=True)
