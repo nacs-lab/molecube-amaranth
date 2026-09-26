@@ -17,15 +17,14 @@ from .utils import assign_xvalue, xvalue
 INST_BUNDLE = [('inst0', 48), ('inst1', 48), ('en1', 1)]
 
 class InstCutter(Elaboratable):
-    def __init__(self, *, pair_ok=None):
+    def __init__(self, *, exclusive=None):
         """
-        pair_ok: optional callable `(m, inst0, inst1) -> Value`
-            deciding whether two consecutive (complete) instructions may be
-            emitted together in one bundle. Default: always.
+        exclusive: optional callable `inst -> Value`
+            marking instructions of which at most one may be in a bundle.
         """
         self.write = Method(i=[('data', 64)])
         self.read = Method(o=INST_BUNDLE)
-        self.pair_ok = pair_ok
+        self.exclusive = exclusive
 
     def elaborate(self, plat):
         m = TModule()
@@ -122,10 +121,11 @@ class InstCutter(Elaboratable):
                                     second = first + c0 + 1
                                     second_inst = blocks(second, 3)
                                     m.d.av_comb += inst1.eq(second_inst)
-                                    if self.pair_ok is None:
+                                    if self.exclusive is None:
                                         pair = C(1)
                                     else:
-                                        pair = self.pair_ok(m, first_inst, second_inst)
+                                        pair = ~(self.exclusive(first_inst) &
+                                                 self.exclusive(second_inst))
                                     with m.Switch(blocks(second, 1)[:2]):
                                         for c1 in range(3):
                                             with m.Case(c1):

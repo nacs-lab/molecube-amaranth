@@ -221,16 +221,12 @@ def _OutputAction(nttl):
     return OutputAction.as_shape()
 
 def is_wait_inst(inst):
-    """Whether a raw instruction is a wait (or wait_trig) instruction."""
-    return InstHead(inst[:4]).opcode == OpCode.WAIT1
+    """Whether a raw instruction is a wait (or wait_trig) instruction.
 
-def inst_pair_ok(m, inst0, inst1):
-    """Pairing rule for the instruction cutter.
-
-    The parser emits at most one wait group per cycle,
-    so two waits cannot be processed together.
+    The parser emits at most one wait group per cycle so the cutter
+    puts at most one wait instruction in a bundle.
     """
-    return ~(is_wait_inst(inst0) & is_wait_inst(inst1))
+    return InstHead(inst[:4]).opcode == OpCode.WAIT1
 
 INST_CLASSES = ('wait', 'clockout', 'ttl', 'dds0', 'dds1', 'dac')
 
@@ -418,7 +414,7 @@ class DMAInstParser(Elaboratable):
     Up to two instructions (a bundle from the `InstCutter`) are consumed
     per cycle. Consecutive output actions are accumulated into a cache
     and each wait instruction emits the accumulated actions together with
-    the wait. A bundle must not contain two waits (see `inst_pair_ok`).
+    the wait. A bundle must not contain two waits (see `is_wait_inst`).
     """
     def __init__(self, csr, nttl):
         self.nttl = nttl

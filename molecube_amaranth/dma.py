@@ -10,7 +10,7 @@ from transactron import TModule, Transaction, Method, def_method
 
 from .fifo import BufferedFifo
 from .inst_cutter import InstCutter, INST_BUNDLE
-from .dma_inst import inst_pair_ok
+from .dma_inst import is_wait_inst
 from .utils import oring_combiner, assign_xvalue, reg_chain
 
 class CountKeeper(Elaboratable):
@@ -217,7 +217,7 @@ class DMAController(Elaboratable):
         def _():
             m.d.sync += [trig_timeout.eq(1)]
 
-        m.submodules.inst_cutter = inst_cutter = InstCutter(pair_ok=inst_pair_ok)
+        m.submodules.inst_cutter = inst_cutter = InstCutter(exclusive=is_wait_inst)
 
         with Transaction().body(m):
             rep = axi_stream.get(m)
