@@ -23,14 +23,18 @@ class ClockOutController(Elaboratable):
         m.d.comb += [self.clockoutio.o.eq(out),
                      self.clockoutio.oe.eq(1)]
 
+        # Count up and compare with the divider instead of loading the
+        # divider into a down counter: a non constant load gets merged into
+        # the counter's carry chain by synthesis, whereas the constant clear
+        # maps to the register reset pins.
         with m.If(divider == self.OFF):
             assign_xvalue(m, counter)
             m.d.sync += out.eq(0)
-        with m.Elif(counter == 0):
-            m.d.sync += [counter.eq(divider),
+        with m.Elif(counter == divider):
+            m.d.sync += [counter.eq(0),
                          out.eq(~out)]
         with m.Else():
-            m.d.sync += counter.eq(counter - 1)
+            m.d.sync += counter.eq(counter + 1)
 
         # The only conflict we should have is potentially trying to
         # reset while running the sequence,
@@ -40,7 +44,7 @@ class ClockOutController(Elaboratable):
         def _(div):
             m.d.sync += [divider.eq(div),
                          self.csr.clockout_div.eq(div[-8:]),
-                         counter.eq(div),
+                         counter.eq(0),
                          out.eq(0)]
 
         return m

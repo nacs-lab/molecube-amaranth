@@ -155,7 +155,8 @@ class DDSController(Elaboratable):
                      ddsio.cs.o.eq(~dds_cs)]
 
         fsm_state = Signal(FSMState)
-        hold_cnt = Signal(5, reset_less=True)
+        hold = Signal(5, reset_less=True)
+        hold_target = Signal(5, reset_less=True)
         hold_end = Signal(reset_less=True)
 
         dds_next_addr = Signal(6, reset_less=True)
@@ -227,14 +228,20 @@ class DDSController(Elaboratable):
         with Transaction().body(m, ready=write_result):
             self.result_fifo.write(m, final_result)
 
-        m.d.sync += [hold_cnt.eq(hold_cnt - 1),
-                     hold_end.eq(hold_cnt[1:] == 0)]
+        # The hold cycles are counted up and compared with the target
+        # (loading the target into a down counter merges the load into
+        # the counter's carry chain). Counting from 1 with a `>=` compare
+        # gives the same `hold_end` timing as the down counter reaching 1.
+        def hold_load(n):
+            return [hold_target.eq(n), hold.eq(1)]
+        m.d.sync += [hold.eq(hold + 1),
+                     hold_end.eq(hold >= hold_target)]
         with m.Switch(fsm_state):
             with m.Case(FSMState.WR_ADSETUP1):
                 with m.If(hold_end):
                     # Assert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ENABLE1),
-                                 hold_cnt.eq(self.csr.dds_write_wrlow),
+                                 *hold_load(self.csr.dds_write_wrlow),
                                  hold_end.eq(self.csr.dds_write_wrlow_iszero)]
                 m.d.sync += [dds_wr.eq(hold_end),
                              dds_rd.eq(0),
@@ -245,7 +252,7 @@ class DDSController(Elaboratable):
                 with m.If(hold_end):
                     # Deassert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ADHOLD1),
-                                 hold_cnt.eq(self.csr.dds_write_adhd),
+                                 *hold_load(self.csr.dds_write_adhd),
                                  hold_end.eq(self.csr.dds_write_adhd_iszero)]
                 m.d.sync += [dds_wr.eq(~hold_end),
                              dds_rd.eq(0),
@@ -255,7 +262,7 @@ class DDSController(Elaboratable):
                 with m.If(hold_end):
                     # Setup next address/data
                     m.d.sync += [fsm_state.eq(FSMState.WR_ADSETUP2),
-                                 hold_cnt.eq(self.csr.dds_write_adsu),
+                                 *hold_load(self.csr.dds_write_adsu),
                                  hold_end.eq(self.csr.dds_write_adsu_iszero),
                                  dds_addr.eq(dds_next_addr),
                                  dds_data_out.eq(dds_next_data)]
@@ -267,7 +274,7 @@ class DDSController(Elaboratable):
                 with m.If(hold_end):
                     # Assert write enable
                     m.d.sync += [fsm_state.eq(FSMState.WR_ENABLE2),
-                                 hold_cnt.eq(self.csr.dds_write_wrlow),
+                                 *hold_load(self.csr.dds_write_wrlow),
                                  hold_end.eq(self.csr.dds_write_wrlow_iszero)]
                 m.d.sync += [dds_wr.eq(hold_end),
                              dds_rd.eq(0),
@@ -279,7 +286,7 @@ class DDSController(Elaboratable):
                     # Deassert write enable
                     m.d.sync += [fsm_state.eq(Mux(dds_need_fud, FSMState.WR_FUDWAIT,
                                                   FSMState.WR_FINALHOLD)),
-                                 hold_cnt.eq(Mux(dds_need_fud, self.csr.dds_write_fuddl,
+                                 *hold_load(Mux(dds_need_fud, self.csr.dds_write_fuddl,
                                                  self.csr.dds_write_adhd)),
                                  hold_end.eq(Mux(dds_need_fud,
                                                  self.csr.dds_write_fuddl_iszero,
@@ -293,7 +300,7 @@ class DDSController(Elaboratable):
                 with m.If(hold_end):
                     # Assert IO update
                     m.d.sync += [fsm_state.eq(FSMState.WR_FINALHOLD),
-                                 hold_cnt.eq(self.csr.dds_write_fudhd),
+                                 *hold_load(self.csr.dds_write_fudhd),
                                  hold_end.eq(self.csr.dds_write_fudhd_iszero),
                                  dds_fud.eq(1)]
                 m.d.sync += [dds_wr.eq(0),
@@ -328,7 +335,7 @@ class DDSController(Elaboratable):
                 with m.If(hold_end):
                     # Setup address and read enable
                     m.d.sync += [fsm_state.eq(FSMState.RD_DELAY1),
-                                 hold_cnt.eq(self.csr.dds_read_rdl),
+                                 *hold_load(self.csr.dds_read_rdl),
                                  hold_end.eq(self.csr.dds_read_rdl_iszero),
                                  dds_addr.eq(dds_next_addr)]
                 do_cache(dds_data_in)
@@ -341,7 +348,7 @@ class DDSController(Elaboratable):
             with m.Case(FSMState.RD_DELAY1):
                 with m.If(hold_end):
                     m.d.sync += [fsm_state.eq(FSMState.RD_ASETUP2),
-                                 hold_cnt.eq(self.csr.dds_read_asu),
+                                 *hold_load(self.csr.dds_read_asu),
                                  hold_end.eq(self.csr.dds_read_asu_iszero)]
                 m.d.sync += [dds_wr.eq(0),
                              dds_rd.eq(hold_end),
@@ -351,7 +358,7 @@ class DDSController(Elaboratable):
             with m.Case(FSMState.RD_ASETUP2):
                 with m.If(hold_end):
                     m.d.sync += [fsm_state.eq(FSMState.RD_FINISH),
-                                 hold_cnt.eq(self.csr.dds_read_rdhoz),
+                                 *hold_load(self.csr.dds_read_rdhoz),
                                  hold_end.eq(self.csr.dds_read_rdhoz_iszero),
                                  dds_addr.eq(0),
                                  write_result.eq(1)]
@@ -377,7 +384,7 @@ class DDSController(Elaboratable):
         def _(arg):
             m.d.sync += [fsm_state.eq(arg.state),
                          self.busy.eq(1),
-                         hold_cnt.eq(arg.hold_cnt),
+                         *hold_load(arg.hold_cnt),
                          hold_end.eq(arg.hold_end),
                          dds_rd.eq(arg.read),
                          dds_id.eq(arg.id),
