@@ -6,7 +6,7 @@ from amaranth.lib import io
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, SimpleTestCircuit
 
-from molecube_amaranth.inst_cutter import InstCutter
+from molecube_amaranth.inst_cutter import InstCutter, INST_BUNDLE_SIZE
 
 import pytest
 import random
@@ -14,8 +14,8 @@ import random
 class TestCutter(TestCaseWithSimulator):
     # Instruction lengths (in 16 bit blocks minus one) to generate and
     # the maximum number of cycles expected on top of the theoretical limit
-    # (two instructions per cycle, or the four blocks per cycle input rate).
-    @pytest.mark.parametrize("lens,margin", [((0, 1, 2), 16), ((0,), 8),
+    # (the four blocks per cycle input rate).
+    @pytest.mark.parametrize("lens,margin", [((0, 1, 2), 8), ((0,), 8),
                                              ((1,), 8), ((2,), 8), ((0, 1), 8)])
     def test_throughput(self, lens, margin):
         cutter = InstCutter()
@@ -54,9 +54,9 @@ class TestCutter(TestCaseWithSimulator):
             assert inst == res_inst & mask
 
         def test_bundle(res):
-            test_inst(res.inst0)
-            if res.en1:
-                test_inst(res.inst1)
+            for j in range(INST_BUNDLE_SIZE):
+                if getattr(res, f'en{j}'):
+                    test_inst(getattr(res, f'inst{j}'))
 
         async def consumer(sim):
             test_bundle(await circ.read.call(sim))
@@ -66,9 +66,8 @@ class TestCutter(TestCaseWithSimulator):
                 ncycles += 1
                 if res is not None:
                     test_bundle(res)
-            # Limited by either the input rate (4 blocks per cycle)
-            # or the output rate (2 instructions per cycle)
-            assert ncycles <= max(nwrites, (ninsts + 1) // 2) + margin
+            # Limited by the input rate (4 blocks per cycle)
+            assert ncycles <= nwrites + margin
 
             for _ in range(10):
                 assert await circ.read.call_try(sim) is None
@@ -116,9 +115,9 @@ class TestCutter(TestCaseWithSimulator):
             assert inst == res_inst & mask
 
         def test_bundle(res):
-            test_inst(res.inst0)
-            if res.en1:
-                test_inst(res.inst1)
+            for j in range(INST_BUNDLE_SIZE):
+                if getattr(res, f'en{j}'):
+                    test_inst(getattr(res, f'inst{j}'))
 
         async def consumer(sim):
             while insts:

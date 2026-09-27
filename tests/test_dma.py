@@ -470,9 +470,9 @@ class TestDMAController(TestCaseWithSimulator):
             assert inst == res_inst & mask
 
         def test_bundle(res):
-            test_inst(res.inst0)
-            if res.en1:
-                test_inst(res.inst1)
+            for j in range(4):
+                if getattr(res, f'en{j}'):
+                    test_inst(getattr(res, f'inst{j}'))
 
         async def f(sim):
             for i in range(128):

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import BufferedFifo, pipeline_regfifo
-from .inst_cutter import INST_BUNDLE
+from .inst_cutter import INST_BUNDLE, INST_BUNDLE_SIZE
 from .utils import assign_xvalue, xvalue, top_d
 from .trigger import TriggerController
 
@@ -230,6 +230,18 @@ def is_wait_inst(inst):
 
 INST_CLASSES = ('wait', 'clockout', 'ttl', 'dds0', 'dds1', 'dac')
 
+class LaneFlags(Struct):
+    # Lane is valid
+    en: 1
+    # Lane comes after the wait of the bundle
+    post: 1
+
+class Lane0Flags(Struct):
+    en: 1
+    post: 1
+    # The bundle has a wait (carried by the first lane only)
+    has_wait: 1
+
 class DMAInstDecoder(Elaboratable):
     """Decode a single instruction stream (one lane)."""
     def __init__(self, csr, nttl, flags_shape=1):
@@ -403,7 +415,9 @@ class DMAInstDecoder(Elaboratable):
                         wait=StructCat(WaitDecode, cycle_m1=(wait_raw.cycle - 1)[:28],
                                        is0=wait_raw.is0))
 
-        pipeline_regfifo(decode_pipe)
+        # The ping-pong flavor keeps the (wide) data registers off
+        # the read side, whose run condition is on a long path.
+        pipeline_regfifo(decode_pipe, pingpong=True)
 
         decode_pipe.add_external(self.read)
 
@@ -413,10 +427,12 @@ class DMAInstDecoder(Elaboratable):
 class DMAInstParser(Elaboratable):
     """Parse the instruction stream into output action groups.
 
-    Up to two instructions (a bundle from the `InstCutter`) are consumed
-    per cycle. Consecutive output actions are accumulated into a cache
-    and each wait instruction emits the accumulated actions together with
-    the wait. A bundle must not contain two waits (see `is_wait_inst`).
+    Up to `INST_BUNDLE_SIZE` instructions (a bundle from the `InstCutter`) are
+    consumed per cycle. Consecutive output actions are accumulated into a
+    cache and each wait instruction emits the accumulated actions together
+    with the wait. A bundle contains at most one wait (see `is_wait_inst`):
+    the lanes before it go into the emitted group and the lanes after it
+    start the next group.
     """
     def __init__(self, csr, nttl):
         self.nttl = nttl
@@ -434,16 +450,28 @@ class DMAInstParser(Elaboratable):
 
         TTLDecode = self.TTLDecode
         OutputAction = self.OutputAction
+        nlanes = INST_BUNDLE_SIZE
 
-        m.submodules.dec0 = dec0 = DMAInstDecoder(self.csr, self.nttl)
-        m.submodules.dec1 = dec1 = DMAInstDecoder(self.csr, self.nttl)
+        decs = []
+        for i in range(nlanes):
+            # Only the first lane carries the bundle level flag
+            dec = DMAInstDecoder(self.csr, self.nttl,
+                                 flags_shape=Lane0Flags if i == 0 else LaneFlags)
+            m.submodules[f'dec{i}'] = dec
+            decs.append(dec)
 
-        # Both lanes are always written so the two decode pipelines stay in lockstep.
-        # Lane 0 carries the flag telling whether lane 1 holds a valid instruction.
+        # All lanes are always written so the decode pipelines stay in lockstep,
+        # each lane carries its own flags (precomputed by the cutter so the
+        # merge below needs no cross lane logic).
         @def_method(m, self.write)
-        def _(inst0, inst1, en1):
-            dec0.write(m, inst=inst0, flags=en1)
-            dec1.write(m, inst=inst1, flags=0)
+        def _(arg):
+            for i, dec in enumerate(decs):
+                flags = dict(en=getattr(arg, f'en{i}'), post=getattr(arg, f'post{i}'))
+                if i == 0:
+                    flags = StructCat(Lane0Flags, has_wait=arg.has_excl, **flags)
+                else:
+                    flags = StructCat(LaneFlags, **flags)
+                dec.write(m, inst=getattr(arg, f'inst{i}'), flags=flags)
 
         m.submodules.decoded_fifo = decoded_fifo = BufferedFifo([('is_trig', 1),
                                                                  ('wait', WaitAction),
@@ -476,24 +504,32 @@ class DMAInstParser(Elaboratable):
                 return d.trivial.dac
             return d.dds
 
-        def apply_lane(d, valid, base):
-            # Merge the action from a decoded lane into the (en, value) cache `base`
-            res = {}
-            for name in action_names:
-                base_en, base_val = base[name]
-                hit = Signal(name=f'{name}_hit')
+        def merge_lanes(name, base_en, base_val, lanes):
+            """Merge the action `name` of the decoded `lanes` (list of
+            (valid, decoded)) into the (en, value) cache `base`.
+
+            TTL sets accumulate by or-ing the values and masks. For the
+            other actions at most one of the sources is active within a
+            wait group (more than one is undefined behavior for that
+            channel) so they are simply or-ed together as well, keeping
+            the merge a flat and-or without any priority logic."""
+            hits = [Signal(name=f'{name}_hit{i}') for i in range(len(lanes))]
+            for hit, (valid, d) in zip(hits, lanes):
                 m.d.top_comb += hit.eq(valid & getattr(d, f'is_{name}'))
-                new_val = Value.cast(action_payload(d, name))
-                if name == 'ttl':
-                    # TTL sets are accumulated
-                    new_val = Mux(base_en, Value.cast(base_val) | new_val, new_val)
-                val = Signal.like(base_val, name=f'{name}_val')
-                m.d.top_comb += val.eq(Mux(hit, new_val, Value.cast(base_val)))
-                res[name] = (base_en | hit, val)
-            return res
+            en = base_en | Cat(*hits).any()
+            res = Mux(base_en, Value.cast(base_val), 0)
+            for hit, (_, d) in zip(hits, lanes):
+                res = res | Mux(hit, Value.cast(action_payload(d, name)), 0)
+            val = Signal.like(base_val, name=f'{name}_val')
+            m.d.top_comb += val.eq(res)
+            return en, val
+
+        def merge_all(base, lanes):
+            return {name: merge_lanes(name, base[name][0], base[name][1], lanes)
+                    for name in action_names}
 
         def empty_cache():
-            return {name: (C(0), xvalue(m, Shape.cast(getattr(g, name).shape()).width))
+            return {name: (C(0), C(0, Shape.cast(getattr(g, name).shape()).width))
                     for name in action_names}
 
         def output_action(cache):
@@ -504,48 +540,64 @@ class DMAInstParser(Elaboratable):
                                  getattr(action, name).eq(val)]
             return action
 
-        @out_pipe.stage(m, o=[('en', 1), ('is_trig', 1), ('wait', WaitAction),
-                              ('action', OutputAction)])
-        def _():
-            d0 = dec0.read(m)
-            d1 = dec1.read(m)
-            en1 = d0.flags
+        # Register the decoded lanes before merging them: the four decoders
+        # are spread out on the chip and the merge collects from all of them,
+        # so this splits the long routes into two stages.
+        lane_layouts = [(f'lane{i}', dec.read.layout_out) for i, dec in enumerate(decs)]
 
-            wait0 = Signal()
-            wait1 = Signal()
-            m.d.top_comb += [wait0.eq(d0.is_wait),
-                             wait1.eq(en1 & d1.is_wait)]
+        @out_pipe.stage(m, o=lane_layouts)
+        def _():
+            return {f'lane{i}': dec.read(m) for i, dec in enumerate(decs)}
+
+        @out_pipe.stage(m, i=lane_layouts, o=[('en', 1), ('is_trig', 1),
+                                              ('wait', WaitAction),
+                                              ('action', OutputAction)])
+        def _(arg):
+            ds = [getattr(arg, f'lane{i}') for i in range(nlanes)]
+            ens = [d.flags.en for d in ds]
+            waits = Signal(nlanes)
+            m.d.top_comb += waits.eq(Cat(*(en & d.is_wait for en, d in zip(ens, ds))))
+            any_wait = ds[0].flags.has_wait
+            # Lanes before and after the wait (at most one wait per bundle),
+            # a wait lane itself has no action so it can count as before.
+            before = [en & ~d.flags.post for en, d in zip(ens, ds)]
+            after = [en & d.flags.post for en, d in zip(ens, ds)]
 
             cache = {name: (getattr(g, f'{name}_en'), getattr(g, name))
                      for name in action_names}
-            # Cache after lane 0 (if it is an action)
-            cache0 = apply_lane(d0, ~wait0, cache)
-            # If lane 0 is a wait, it emits the cache and lane 1 starts a new group.
-            # Otherwise lane 1 (if a wait) emits the cache including lane 0.
-            emitted = {name: (Mux(wait0, cache[name][0], cache0[name][0]),
-                              Mux(wait0, Value.cast(cache[name][1]),
-                                  Value.cast(cache0[name][1])))
-                       for name in action_names}
-            empty = empty_cache()
-            base1 = {name: (Mux(wait0, empty[name][0], cache0[name][0]),
-                            Mux(wait0, empty[name][1], Value.cast(cache0[name][1])))
-                     for name in action_names}
-            cache1 = apply_lane(d1, en1, base1)
+            # Emitted group: the cache and the actions before the wait
+            # (all lanes if there is no wait, in which case it is not emitted)
+            emitted = merge_all(cache, [(b, d) for b, d in zip(before, ds)])
+            # Next cache: the actions after the wait, or the cache and all
+            # the actions if there is no wait. Since the actions are or-ed
+            # this is a single flat merge with the sources gated by the
+            # (registered) wait flag.
+            kept = {name: (cache[name][0] & ~any_wait,
+                           Mux(any_wait, 0, Value.cast(cache[name][1])))
+                    for name in action_names}
+            restart = merge_all(kept, [(a | (b & ~any_wait), d)
+                                       for a, b, d in zip(after, before, ds)])
             for name in action_names:
-                m.d.sync += [getattr(g, f'{name}_en').eq(Mux(wait1, 0, cache1[name][0])),
-                             getattr(g, name).eq(Mux(wait1, empty[name][1],
-                                                     cache1[name][1]))]
+                m.d.sync += [getattr(g, f'{name}_en').eq(restart[name][0]),
+                             getattr(g, name).eq(restart[name][1])]
 
-            # The wait of the emitting lane
-            wait_opcode = Mux(wait0, Value.cast(d0.opcode), Value.cast(d1.opcode))
-            is_trig = wait_opcode[0]
+            # The wait of the (only) wait lane
+            is_trig = Signal()
             wait_action = Signal(WaitAction)
-            m.d.av_comb += wait_action.wait_trig.eq(Mux(wait0, d0.trivial.wait_trig,
-                                                        d1.trivial.wait_trig))
+            sel_opcode0 = C(0)
+            sel_wait_trig = C(0, Shape.cast(WaitTrigDecode).width)
+            sel_wait = C(0, Shape.cast(WaitDecode).width)
+            for i, d in enumerate(ds):
+                sel_opcode0 = sel_opcode0 | Mux(waits[i], Value.cast(d.opcode)[0], 0)
+                sel_wait_trig = sel_wait_trig | Mux(waits[i],
+                                                    Value.cast(d.trivial.wait_trig), 0)
+                sel_wait = sel_wait | Mux(waits[i], Value.cast(d.wait), 0)
+            m.d.top_comb += is_trig.eq(sel_opcode0)
+            m.d.av_comb += wait_action.wait_trig.eq(sel_wait_trig)
             with m.If(~is_trig):
-                m.d.av_comb += wait_action.wait.eq(Mux(wait0, d0.wait, d1.wait))
+                m.d.av_comb += wait_action.wait.eq(sel_wait)
 
-            return dict(en=wait0 | wait1, is_trig=is_trig, wait=wait_action,
+            return dict(en=any_wait, is_trig=is_trig, wait=wait_action,
                         action=output_action(emitted))
 
         @out_pipe.stage(m)

@@ -15,6 +15,7 @@ from molecube_amaranth.csr import Registers
 from molecube_amaranth.dds import FSMState as DDSFSMState
 from molecube_amaranth.dma import DMAController
 from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
+from molecube_amaranth.inst_cutter import INST_BUNDLE_SIZE
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.io import PulseIO, sma_pin
 
@@ -83,22 +84,50 @@ dac_inst = def_inst(2, 3, [('id', 2), ('cycle', 9), ('clk_pha', 1), ('clk_pol', 
 def is_wait_inst(inst):
     return (inst >> 2) & 3 == 0
 
-async def send_insts(sim, circ, insts, pair_prob=0.7):
-    """Write the instructions as bundles of up to two instructions,
-    randomly pairing consecutive instructions when allowed."""
+def is_wait_inst(inst):
+    return (inst >> 2) & 3 == 0
+
+def bundle_args(insts, lanes):
+    """Bundle write arguments with `insts` placed at the given lane positions,
+    including the wait classification flags the cutter provides."""
+    args = {f'inst{j}': 0 for j in range(INST_BUNDLE_SIZE)}
+    args.update({f'en{j}': 0 for j in range(INST_BUNDLE_SIZE)})
+    args.update({f'post{j}': 0 for j in range(INST_BUNDLE_SIZE)})
+    args['has_excl'] = 0
+    seen_wait = False
+    for inst, lane in zip(insts, lanes):
+        args[f'inst{lane}'] = inst
+        args[f'en{lane}'] = 1
+        args[f'post{lane}'] = int(seen_wait)
+        if is_wait_inst(inst):
+            assert not seen_wait
+            seen_wait = True
+            args['has_excl'] = 1
+    return args
+
+async def send_insts(sim, circ, insts, group_prob=0.7, strict=False):
+    """Write the instructions as bundles of up to `INST_BUNDLE_SIZE` instructions
+    with at most one wait per bundle, at random lane positions.
+    With `strict`, every bundle must be accepted immediately.
+    Returns the number of bundles."""
     i = 0
+    nbundles = 0
     while i < len(insts):
-        inst0 = insts[i]
-        if (i + 1 < len(insts) and random.random() < pair_prob and
-            not (is_wait_inst(inst0) and is_wait_inst(insts[i + 1]))):
-            inst1 = insts[i + 1]
-            i += 2
-            assert (await circ.write.call_try(sim, inst0=inst0, inst1=inst1,
-                                              en1=1)) is not None
-        else:
+        group = [insts[i]]
+        i += 1
+        while (i < len(insts) and len(group) < INST_BUNDLE_SIZE and
+               random.random() < group_prob and
+               not (is_wait_inst(insts[i]) and any(is_wait_inst(g) for g in group))):
+            group.append(insts[i])
             i += 1
-            assert (await circ.write.call_try(sim, inst0=inst0, inst1=0,
-                                              en1=0)) is not None
+        lanes = sorted(random.sample(range(INST_BUNDLE_SIZE), len(group)))
+        args = bundle_args(group, lanes)
+        nbundles += 1
+        if strict:
+            assert (await circ.write.call_try(sim, **args)) is not None
+        else:
+            await circ.write.call(sim, **args)
+    return nbundles
 
 def rand_inst(instf, **kw):
     spec = instf.inst_spec
@@ -580,7 +609,7 @@ class TestParser(TestCaseWithSimulator):
             insts.append(random.choice((state.rand_wait1,
                                         state.rand_wait2,
                                         state.rand_wait_trig))())
-        nbundles = (len(insts) + 1) // 2
+        nbundles = []
 
         async def producer(sim):
             sim.set(circ.csr.dds_write_adsu, 7)
@@ -588,7 +617,7 @@ class TestParser(TestCaseWithSimulator):
             for _ in range(3):
                 await sim.tick()
             # `send_insts` asserts that every bundle is accepted immediately
-            await send_insts(sim, circ, insts, pair_prob=1.0)
+            nbundles.append(await send_insts(sim, circ, insts, group_prob=1.0, strict=True))
 
         async def consumer(sim):
             state.check_action(await circ.read.call(sim))
@@ -598,7 +627,7 @@ class TestParser(TestCaseWithSimulator):
                 ncycles += 1
                 if req is not None:
                     state.check_action(req)
-            assert ncycles <= nbundles + 16
+            assert ncycles <= nbundles[0] + 16
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(producer)
@@ -612,12 +641,12 @@ class TestParser(TestCaseWithSimulator):
         inst = state.rand_wait1()
 
         async def f(sim):
-            await circ.write.call(sim, inst0=inst, inst1=0, en1=0)
+            await circ.write.call(sim, **bundle_args([inst], [0]))
             ncycles = 1
             while (req := await circ.read.call_try(sim)) is None:
                 ncycles += 1
             state.check_action(req)
-            assert ncycles <= 9
+            assert ncycles <= 10
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
