@@ -15,6 +15,7 @@ from molecube_amaranth.config import MAJOR_VERSION, MINOR_VERSION, Config
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.controllers import IOController
 from molecube_amaranth.interface import ControlInterface
+from molecube_amaranth.dma_inst import DDSMaskReq
 from molecube_amaranth.io import PulseIO
 
 import pytest
@@ -52,7 +53,12 @@ class InterfaceWrapper(Elaboratable):
         self.pulseio = PulseIO.from_config(None, config)
         self.ioctrl = IOController(self.pulseio, self.csr, self.fifos,
                                    clock_shift=config.CLOCK_SHIFT)
+        # Stub of the DMA DDS write disabler, recording the requests
+        self.set_dds_mask = Method(i=DDSMaskReq.as_shape())
+        self.dds_mask_req = Signal(DDSMaskReq)
+        self.dds_mask_req_valid = Signal()
         self.iface = ControlInterface(axi, self.csr, self.fifos, self.ioctrl,
+                                      self.set_dds_mask,
                                       prefix=addr_prefix, valid_width=9)
 
         self.reader = AXIMasterReadIFace(self.iface.axi)
@@ -80,6 +86,7 @@ class InterfaceWrapper(Elaboratable):
             0x07: MINOR_VERSION,
             0x29: self.csr.dbg_underflow_cycle.value,
 
+            0x54: self.csr.dds_mask,
             0x58: Signal.cast(self.csr.dma_status),
         }
 
@@ -150,6 +157,11 @@ class InterfaceWrapper(Elaboratable):
         m.submodules.csr = self.csr
         m.submodules.fifos = self.fifos
         m.submodules.iface = self.iface
+
+        m.d.sync += self.dds_mask_req_valid.eq(0)
+        @def_method(m, self.set_dds_mask)
+        def _(arg):
+            m.d.sync += [self.dds_mask_req.eq(arg), self.dds_mask_req_valid.eq(1)]
 
         m.submodules.reader = self.reader
         m.submodules.writer = self.writer
@@ -394,6 +406,28 @@ class TestInterface(TestCaseWithSimulator):
                 assert (await iface.read_reply.call_try(sim)).data == (ttl_val >> (bank * 32)) & 0xffff_ffff
 
             assert sim.get(iface.pulseio.ttlout_port.o) == (sim.get(iface.csr.ttl_out) | sim.get(iface.csr.ttl_hi_mask)) & ~sim.get(iface.csr.ttl_lo_mask) & 0xff_ffff_ffff_ffff
+
+        with self.run_simulation(iface) as sim:
+            sim.add_testbench(f)
+
+    @pytest.mark.parametrize("addr_width", [9, 20])
+    def test_dds_mask_request(self, addr_width):
+        iface = InterfaceWrapper(addr_width=addr_width)
+        async def f(sim):
+            for _ in range(20):
+                data = random.randint(0, 0xffff_ffff)
+                assert (await iface.write_request.call_try(sim, addr=0x54 * 4,
+                                                           strb=0xf,
+                                                           data=data)) is not None
+                # Exactly one request with the low 13 bits of the data
+                nreq = 0
+                for _ in range(20):
+                    await sim.tick()
+                    if sim.get(iface.dds_mask_req_valid):
+                        nreq += 1
+                        assert sim.get(Signal.cast(iface.dds_mask_req)) == data & 0x1fff
+                assert nreq == 1
+                assert (await iface.write_reply.call_try(sim)) is not None
 
         with self.run_simulation(iface) as sim:
             sim.add_testbench(f)

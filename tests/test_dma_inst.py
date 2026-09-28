@@ -13,7 +13,7 @@ from molecube_amaranth.controllers import IOController
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.dds import FSMState as DDSFSMState
 from molecube_amaranth.dma import DMAController
-from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner
+from molecube_amaranth.dma_inst import DMAInstParser, DMAInstRunner, DDS_NOOP_IDX
 from molecube_amaranth.inst_cutter import INST_BUNDLE_SIZE
 from molecube_amaranth.fifo import Fifos
 from molecube_amaranth.io import PulseIO, sma_pin
@@ -29,6 +29,7 @@ class ParserTester(Elaboratable):
         self.parser = DMAInstParser(self.csr, 56)
         self.read = _TestbenchIO(AdapterTrans.create(self.parser.read))
         self.write = _TestbenchIO(AdapterTrans.create(self.parser.write))
+        self.set_dds_mask = _TestbenchIO(AdapterTrans.create(self.parser.set_dds_mask))
 
     def elaborate(self, plat):
         m = TModule()
@@ -37,6 +38,7 @@ class ParserTester(Elaboratable):
         m.submodules.parser = self.parser
         m.submodules.read = self.read
         m.submodules.write = self.write
+        m.submodules.set_dds_mask = self.set_dds_mask
 
         return m
 
@@ -153,6 +155,12 @@ class ParserState:
             self.dds_write_adsu = self.csr.dds_write_adsu.init
         self.ttl_mask = 0
         self.ttl_value = 0
+        # Disabled DDS registers, (bus_id, dds_id, idx)
+        self.dds_mask = set()
+
+    def dds_addr(self, bus_id, dds_id, idx):
+        # Writes to disabled registers are redirected to the no-op register
+        return DDS_NOOP_IDX if (bus_id, dds_id, idx) in self.dds_mask else idx
 
     @staticmethod
     def hw_wait(wait):
@@ -250,7 +258,7 @@ class ParserState:
                                   id=dds_id, hold_cnt=self.dds_write_adsu,
                                   hold_end=self.dds_write_adsu == 0,
                                   read=0, reset=0, fud=fud,
-                                  addr1=addr, data1=data)
+                                  addr1=self.dds_addr(bus_id, dds_id, addr), data1=data)
         self.checker_actions[name] = dict(type='set1', id=dds_id + bus_id * 11,
                                           addr=addr << 1, data=data, fud=fud)
 
@@ -269,8 +277,10 @@ class ParserState:
                                   id=dds_id, hold_cnt=self.dds_write_adsu,
                                   hold_end=self.dds_write_adsu == 0,
                                   read=0, reset=0, fud=fud,
-                                  addr1=addr, data1=data & 0xffff,
-                                  addr2=addr | 1, data2=data >> 16)
+                                  addr1=self.dds_addr(bus_id, dds_id, addr),
+                                  data1=data & 0xffff,
+                                  addr2=self.dds_addr(bus_id, dds_id, addr | 1),
+                                  data2=data >> 16)
         self.checker_actions[name] = dict(type='set2', id=dds_id + bus_id * 11,
                                           addr=addr << 1, data=data, fud=fud)
 
@@ -649,6 +659,82 @@ class TestParser(TestCaseWithSimulator):
 
         with self.run_simulation(circ) as sim:
             sim.add_testbench(f)
+
+
+    def test_dds_mask(self):
+        circ = ParserTester()
+        state = ParserState()
+        state.dds_write_adsu = 7
+        csr = circ.csr
+
+        # Random disable bits for register pairs on a few DDS on both buses
+        writes = []
+        for bus_id in range(2):
+            for dds_id in random.sample(range(11), 3):
+                for pair in random.sample(range(32), 10):
+                    writes.append((bus_id, dds_id, pair, random.randint(1, 3)))
+        # Overwrite some of them again
+        writes += [(b, d, p, random.randint(0, 3))
+                   for (b, d, p, _) in random.sample(writes, 10)]
+        final = {}
+        for (b, d, p, v) in writes:
+            final[(b, d, p)] = v
+        for (b, d, p), v in final.items():
+            for j in range(2):
+                if (v >> j) & 1:
+                    state.dds_mask.add((b, d, p * 2 + j))
+        mask_dds = sorted({(b, d) for (b, d, _, _) in writes})
+
+        async def mask_request(sim, bus_id, dds_id, pair, we, value):
+            await circ.set_dds_mask.call(sim, bus_id=bus_id, dds_id=dds_id, pair=pair,
+                                         we=we, value=value)
+            # Read back latency
+            for _ in range(3):
+                await sim.tick()
+
+        insts = []
+        for _ in range(200):
+            # Up to two DDS commands on different buses per group, targeting
+            # mostly the DDS with disabled registers and with both even and
+            # odd addresses for the 32 bit writes.
+            for bus_id in random.sample(range(2), random.randint(0, 2)):
+                dds_choices = [d for (b, d) in mask_dds if b == bus_id]
+                dds_id = random.choice(dds_choices + [random.randrange(11)])
+                if random.random() < 0.5:
+                    inst, kws = rand_inst(dds_set16_inst, bus_id=(bus_id,),
+                                          dds_id=(dds_id,))
+                    state.add_dds_set16(**kws)
+                else:
+                    inst, kws = rand_inst(dds_set32_inst, bus_id=(bus_id,),
+                                          dds_id=(dds_id,))
+                    state.add_dds_set32(**kws)
+                insts.append(inst)
+            insts.append(random.choice((state.rand_wait1,
+                                        state.rand_wait2,
+                                        state.rand_wait_trig))())
+
+        async def producer(sim):
+            sim.set(csr.dds_write_adsu, 7)
+            expected = {}
+            for (b, d, p, v) in writes:
+                await mask_request(sim, b, d, p, 1, v)
+                expected[(b, d, p)] = v
+                assert sim.get(csr.dds_mask) == v
+                # A query (no write enable) returns the stored bits
+                # without changing them
+                b2, d2, p2 = random.choice(writes)[:3]
+                await mask_request(sim, b2, d2, p2, 0, random.randint(0, 3))
+                assert sim.get(csr.dds_mask) == expected.get((b2, d2, p2), 0)
+            assert expected == final
+            await send_insts(sim, circ, insts)
+
+        async def consumer(sim):
+            while state.queue:
+                state.check_action(await circ.read.call(sim))
+
+        with self.run_simulation(circ) as sim:
+            sim.add_testbench(producer)
+            sim.add_testbench(consumer)
 
 
 def config(*, spi=False, clock_shift=1):

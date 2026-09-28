@@ -3,6 +3,7 @@
 from amaranth import *
 from amaranth.lib import enum
 from amaranth.lib.data import Struct, Union, ArrayLayout, View
+from amaranth.lib.memory import Memory
 from amaranth.utils import ceil_log2
 
 from transactron import TModule, Transaction, Method, def_method
@@ -229,6 +230,23 @@ def is_wait_inst(inst):
 
 INST_CLASSES = ('wait', 'clockout', 'ttl', 'dds0', 'dds1', 'dac')
 
+# DMA DDS write disabler request.
+# Selects the pair of 16 bit registers `pair * 2` and `pair * 2 + 1`
+# (i.e. `pair` is the DDS parallel address >> 2) of DDS `dds_id` on bus
+# `bus_id`; if `we` is set, `value` is stored as the disable bits of the pair
+# (bit 0 for the even register, bit 1 for the odd one). The `dds_mask` CSR
+# then reflects the disable bits of the pair selected by the last request.
+class DDSMaskReq(Struct):
+    bus_id: 1
+    dds_id: 4
+    pair: 5
+    we: 1
+    value: 2
+
+# DMA DDS writes to disabled registers are redirected to this 16 bit register
+# (DDS parallel address 0x70) to keep the timing of the other side effects.
+DDS_NOOP_IDX = 0x38
+
 class LaneFlags(Struct):
     # Lane is valid
     en: 1
@@ -243,11 +261,15 @@ class Lane0Flags(Struct):
 
 class DMAInstDecoder(Elaboratable):
     """Decode a single instruction stream (one lane)."""
-    def __init__(self, csr, nttl, flags_shape=1):
+    def __init__(self, csr, nttl, flags_shape=1, dds_mask_port=None):
         """
         flags_shape: shape of the `flags` field passed through the decoder unchanged
+        dds_mask_port: optional asynchronous read port of the DDS write
+            disable bits (see `DMAInstParser`); disabled DDS writes are
+            redirected to `DDS_NOOP_IDX`.
         """
         self.csr = csr
+        self.dds_mask_port = dds_mask_port
         TTLDecode = _TTLDecode(nttl)
         self.nttl = nttl
         self.TTLDecode = TTLDecode
@@ -402,17 +424,44 @@ class DMAInstDecoder(Elaboratable):
                         trivial=trivial, opcode=opcode, **flags)
 
         @decode_pipe.stage(m, o=[('wait_raw', WaitRawDecode),
-                                 ('ttl16', TTLDecode), ('ttl32', TTLDecode)])
+                                 ('ttl16', TTLDecode), ('ttl32', TTLDecode),
+                                 ('dds_mask', 2)])
         def decode_2(head, args, wait1, wait2, ttl16, ttl32):
             ttl16, ttl32 = ttl_bank2(args, ttl16, ttl32)
-            return dict(wait_raw=WaitRawDecode(Mux(head.len[0], wait2, wait1)),
-                        ttl16=ttl16, ttl32=ttl32)
 
-        @decode_pipe.stage(m, o=[('ttl', TTLDecode), ('wait', WaitDecode)])
-        def decode_3(head, ttl4, ttl16, ttl32, wait_raw):
+            ## DDS write disable bits
+            # The set16 and set32 instructions have the same bus_id, dds_id
+            # and address fields. The two registers written by a set32
+            # (`addr` and `addr | 1`) are in the same entry of the mask memory.
+            # The memory read (a LUTRAM mux tree) is registered as is,
+            # the bit for each register is selected in the next stage.
+            dds_mask = Signal(2)
+            port = self.dds_mask_port
+            if port is not None:
+                dds_arg = args.dds_set16
+                m.d.top_comb += [port.addr.eq(Cat(dds_arg.addr[1:], dds_arg.dds_id,
+                                                  dds_arg.bus_id)),
+                                 dds_mask.eq(port.data)]
+
+            return dict(wait_raw=WaitRawDecode(Mux(head.len[0], wait2, wait1)),
+                        ttl16=ttl16, ttl32=ttl32, dds_mask=dds_mask)
+
+        @decode_pipe.stage(m, o=[('ttl', TTLDecode), ('wait', WaitDecode),
+                                 ('dds', DDSDecode)])
+        def decode_3(head, ttl4, ttl16, ttl32, wait_raw, dds, dds_mask):
+            # Redirect the disabled DDS writes to the no-op register.
+            # `addr1` is the instruction address, `addr2` (only for set32)
+            # is the odd register of the same pair.
+            dds_mask1 = dds_mask.bit_select(dds.addr1[0], 1)
+            dds_mask2 = dds_mask[1]
+            dds_out = Signal(DDSDecode)
+            m.d.top_comb += [dds_out.eq(dds),
+                             dds_out.addr1.eq(Mux(dds_mask1, DDS_NOOP_IDX, dds.addr1)),
+                             dds_out.addr2.eq(Mux(dds_mask2, DDS_NOOP_IDX, dds.addr2))]
             return dict(ttl=ttl_select(head, ttl4, ttl16, ttl32),
                         wait=StructCat(WaitDecode, cycle_m1=(wait_raw.cycle - 1)[:28],
-                                       is0=wait_raw.is0))
+                                       is0=wait_raw.is0),
+                        dds=dds_out)
 
         # The ping-pong flavor keeps the (wide) data registers off
         # the read side, whose run condition is on a long path.
@@ -443,6 +492,8 @@ class DMAInstParser(Elaboratable):
         self.write = Method(i=INST_BUNDLE)
         self.read = Method(o=[('is_trig', 1), ('wait', WaitAction),
                               ('action', OutputAction)])
+        # DDS write disabler configuration (semi-static)
+        self.set_dds_mask = Method(i=DDSMaskReq.as_shape())
 
     def elaborate(self, plat):
         m = TModule()
@@ -451,11 +502,45 @@ class DMAInstParser(Elaboratable):
         OutputAction = self.OutputAction
         nlanes = INST_BUNDLE_SIZE
 
+        ## DDS write disabler
+        # One disable bit per 16 bit register of each DDS, indexed by
+        # (bus_id, dds_id, idx). Stored as pairs of bits (even/odd idx)
+        # so that the two registers of a set32 are in the same entry and each
+        # lane only needs one read port. Semi-static, configured through
+        # the CSR request from the control interface; zero (nothing disabled)
+        # at power up (not cleared by reset).
+        m.submodules.dds_mask = dds_mask = Memory(shape=unsigned(2), depth=2 * 16 * 32,
+                                                  init=[])
+        def dds_mask_addr(req):
+            return Cat(req.pair, req.dds_id, req.bus_id)
+
+        # The request is registered first to keep the caller's path short
+        req = Signal(DDSMaskReq, reset_less=True)
+        req_valid = Signal()
+        m.d.sync += req_valid.eq(0)
+
+        @def_method(m, self.set_dds_mask)
+        def _(arg):
+            m.d.sync += [req.eq(arg), req_valid.eq(1)]
+
+        mask_wr = dds_mask.write_port()
+        m.d.comb += [mask_wr.addr.eq(dds_mask_addr(req)),
+                     mask_wr.data.eq(req.value),
+                     mask_wr.en.eq(req_valid & req.we)]
+        # Read back of the register selected by the last request
+        mask_rd = dds_mask.read_port(domain="comb")
+        mask_rd_req = Signal(DDSMaskReq, reset_less=True)
+        with m.If(req_valid):
+            m.d.sync += mask_rd_req.eq(req)
+        m.d.comb += mask_rd.addr.eq(dds_mask_addr(mask_rd_req))
+        m.d.sync += self.csr.dds_mask.eq(mask_rd.data)
+
         decs = []
         for i in range(nlanes):
             # Only the first lane carries the bundle level flag
             dec = DMAInstDecoder(self.csr, self.nttl,
-                                 flags_shape=Lane0Flags if i == 0 else LaneFlags)
+                                 flags_shape=Lane0Flags if i == 0 else LaneFlags,
+                                 dds_mask_port=dds_mask.read_port(domain="comb"))
             m.submodules[f'dec{i}'] = dec
             decs.append(dec)
 

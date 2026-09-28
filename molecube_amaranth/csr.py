@@ -96,6 +96,9 @@ class Registers(Elaboratable):
         self.dds1_reg = Signal(self.REG_WIDTH, reset_less=True)
         self.dma_status = Signal(DMAStatus, init={'cmd_empty': 1})
         self.dma_ctrl = Signal(DMACtrl)
+        # DMA DDS write disabler: disable bits of the register pair selected
+        # by the last request (see `DMAInstParser.set_dds_mask`)
+        self.dds_mask = Signal(2, reset_less=True)
 
         # Semistatic
         self.dma_ttl_mask.attrs["molecube.vivado.false_path_from"] = "TRUE"

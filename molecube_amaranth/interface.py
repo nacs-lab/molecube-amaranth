@@ -9,6 +9,7 @@ from transactron.lib import PipelineBuilder
 from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
+from .dma_inst import DDSMaskReq
 from .fifo import RegFifo, pipeline_regfifo
 from .utils import xvalue, reg_chain
 
@@ -110,7 +111,12 @@ class ReadStates:
         return batches
 
 class ControlInterface(Elaboratable):
-    def __init__(self, axi, csr_regs, fifos, ioctrl, prefix=0, valid_width=None):
+    def __init__(self, axi, csr_regs, fifos, ioctrl, set_dds_mask, prefix=0,
+                 valid_width=None):
+        """
+        set_dds_mask: method setting the DMA DDS write disabler
+            (`DMAInstParser.set_dds_mask`)
+        """
         self.axi = axi
         self.addr_width = len(axi.AWADDR)
         self.data_width = len(axi.WDATA)
@@ -123,6 +129,7 @@ class ControlInterface(Elaboratable):
         self.prefix = prefix >> valid_width
         self.valid_width = valid_width
         self.ioctrl = ioctrl
+        self.set_dds_mask = set_dds_mask
 
     def elaborate(self, plat):
         m = TModule()
@@ -160,9 +167,10 @@ class ControlInterface(Elaboratable):
             setattr(rd_shadow, reg_name, rd_reg)
 
         for reg_name in ['ttl_out', 'ttl_in', 'timing_status', 'clockout_div',
-                         'dds0_reg', 'dds1_reg', 'dma_status']:
+                         'dds0_reg', 'dds1_reg', 'dma_status', 'dds_mask']:
             real_reg = Signal.cast(getattr(csr, reg_name))
-            if reg_name in ('ttl_out', 'ttl_in', 'clockout_div', 'dds0_reg', 'dds1_reg'):
+            if reg_name in ('ttl_out', 'ttl_in', 'clockout_div', 'dds0_reg', 'dds1_reg',
+                            'dds_mask'):
                 rd_reg = relaxed_read_shadow(m, real_reg)
             else:
                 rd_reg, _ = reg_chain(m, input=real_reg, levels=2,
@@ -296,6 +304,8 @@ class ControlInterface(Elaboratable):
                     self.ioctrl.dds0.read_dds_cache(m, id=data[7:11], addr=data[1:7])
                 with m.Case(0x53):
                     self.ioctrl.dds1.read_dds_cache(m, id=data[7:11], addr=data[1:7])
+                with m.Case(0x54):
+                    self.set_dds_mask(m, DDSMaskReq(data[:Shape.cast(DDSMaskReq).width]))
                 with m.Case(0x59):
                     m.d.sync += wr_shadow.dma_ctrl.eq(data)
 
@@ -404,6 +414,7 @@ class ControlInterface(Elaboratable):
         read_states.add_leaf(0x51, rd_shadow.dds_timing2)
         read_states.add_leaf(0x52, rd_shadow.dds0_reg)
         read_states.add_leaf(0x53, rd_shadow.dds1_reg)
+        read_states.add_leaf(0x54, rd_shadow.dds_mask)
 
         read_states.add_leaf(0x58, rd_shadow.dma_status)
         read_states.add_leaf(0x59, rd_shadow.dma_ctrl)

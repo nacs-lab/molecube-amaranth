@@ -42,9 +42,6 @@ class TopLevel(Elaboratable):
         m.submodules.pulseio = pulseio = PulseIO.from_config(plat, self.config)
         m.submodules.ioctrl = ioctrl = IOController(pulseio, regs, fifos,
                                                     clock_shift=self.config.CLOCK_SHIFT)
-        m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,
-                                                                ioctrl, prefix=0x7300_0000,
-                                                                valid_width=9)
         m.submodules.inst_runner = inst_runner = InstRunner(
             pulseio, regs, fifos, ioctrl, clock_shift=self.config.CLOCK_SHIFT)
         m.submodules.inst_dispatcher = inst_dispatcher = InstDispatcher(
@@ -62,5 +59,12 @@ class TopLevel(Elaboratable):
                                                             dma_runner.write)
         m.submodules.inst_consumer = InstConsumer(dma_runner.long_wait, ioctrl, fifos,
                                                   clock_shift=self.config.CLOCK_SHIFT)
+
+        # The software interface, instantiated last since no other hardware
+        # module talks to it directly
+        m.submodules.controller = controller = ControlInterface(ps.MAXIGP0, regs, fifos,
+                                                                ioctrl, dma_parser.set_dds_mask,
+                                                                prefix=0x7300_0000,
+                                                                valid_width=9)
 
         return m
