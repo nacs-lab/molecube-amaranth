@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.lib import enum
 
-from transactron import TModule, Transaction, Method, def_method
+from transactron import TModule, Method, def_method
 
 from .utils import assign_xvalue
 

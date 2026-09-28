@@ -2,7 +2,6 @@
 
 from molecube_amaranth.build import build_zc702, load_var
 
-import importlib.util
 import argparse
 
 parser = argparse.ArgumentParser(

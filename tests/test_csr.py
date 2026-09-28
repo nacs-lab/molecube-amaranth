@@ -7,7 +7,6 @@ from transactron.testing.testbenchio import CallTrigger
 
 from molecube_amaranth.csr import Counter
 
-import pytest
 
 class TestCounter(TestCaseWithSimulator):
     def test_count(self):

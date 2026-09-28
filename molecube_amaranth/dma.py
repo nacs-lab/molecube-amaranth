@@ -1,14 +1,12 @@
 #
 
 from amaranth import *
-from amaranth.lib.data import Struct
 from amaranth.utils import exact_log2
 
 from amaranth_axi.axitools import AXIMasterReadIFace
 
 from transactron import TModule, Transaction, Method, def_method
 
-from .fifo import BufferedFifo
 from .inst_cutter import InstCutter, INST_BUNDLE
 from .dma_inst import is_wait_inst
 from .utils import oring_combiner, assign_xvalue, reg_chain

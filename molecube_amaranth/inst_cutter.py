@@ -6,7 +6,6 @@ from transactron import TModule, Transaction, Method
 from transactron.lib import Connect
 
 from .fifo import RegFifo
-from .utils import assign_xvalue, xvalue
 
 # Instruction format:
 #   [len: 2][opcode: 2][data: 12/28/44]

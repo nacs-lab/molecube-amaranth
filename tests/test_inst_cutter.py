@@ -1,9 +1,7 @@
 #
 
 from amaranth import *
-from amaranth.lib import io
 
-from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, SimpleTestCircuit
 
 from molecube_amaranth.inst_cutter import InstCutter, INST_BUNDLE_SIZE

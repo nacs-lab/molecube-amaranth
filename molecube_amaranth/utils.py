@@ -1,7 +1,7 @@
 #
 
 from amaranth import *
-from amaranth.lib.data import Layout, View
+from amaranth.lib.data import View
 
 from transactron import TModule
 

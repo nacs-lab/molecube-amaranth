@@ -9,7 +9,6 @@ from transactron.lib import PipelineBuilder
 from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
-from .csr import Registers
 from .fifo import BufferedFifo, pipeline_regfifo
 from .utils import xvalue, reg_chain
 

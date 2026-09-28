@@ -4,12 +4,12 @@ from amaranth import *
 from amaranth.lib import enum
 from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 
-from transactron import TModule, Transaction, Method, def_method
+from transactron import TModule, Transaction, Method
 from transactron.lib import PipelineBuilder
 
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import pipeline_regfifo
-from .utils import assign_xvalue, xvalue, top_d
+from .utils import assign_xvalue, top_d
 
 def single_cycle(m, en):
     m.d.sync += en.eq(0)

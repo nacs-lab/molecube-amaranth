@@ -1,9 +1,8 @@
 #
 
 from amaranth import *
-from amaranth.lib import io
 
-from transactron import TModule, Method, def_method
+from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO
 from transactron.lib.adapters import AdapterTrans
 
@@ -11,8 +10,6 @@ from molecube_amaranth.config import Config
 from molecube_amaranth.csr import Registers
 from molecube_amaranth.ttlout import TTLOutController
 from molecube_amaranth.io import PulseIO
-
-from .utils import DDSChecker
 
 import pytest
 import random

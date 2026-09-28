@@ -1,7 +1,6 @@
 #
 
 from amaranth import *
-from amaranth.lib import io
 from amaranth.lib.memory import Memory, MemoryData
 from amaranth.utils import exact_log2
 

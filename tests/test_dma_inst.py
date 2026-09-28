@@ -1,7 +1,6 @@
 #
 
 from amaranth import *
-from amaranth.lib import io
 
 from transactron import TModule
 from transactron.testing import TestCaseWithSimulator, TestbenchIO as _TestbenchIO

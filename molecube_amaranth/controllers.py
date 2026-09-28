@@ -1,7 +1,6 @@
 #
 
 from amaranth import *
-from amaranth.lib.data import Field, FlexibleLayout, View, StructLayout
 
 from .clockout import ClockOutController
 from .spi import SPIController

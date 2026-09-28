@@ -15,8 +15,7 @@ from types import SimpleNamespace
 from .dds import SET_ARG as DDS_SET_ARG, DDSReq
 from .fifo import BufferedFifo, pipeline_regfifo
 from .inst_cutter import INST_BUNDLE, INST_BUNDLE_SIZE
-from .utils import assign_xvalue, xvalue, top_d
-from .trigger import TriggerController
+from .utils import assign_xvalue, top_d
 
 # Instruction format:
 #   [len: 2][opcode: 2][data: 12/28/44]

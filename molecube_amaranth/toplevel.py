@@ -1,8 +1,6 @@
 #
 
 from amaranth import *
-from amaranth.lib import wiring
-from amaranth.lib.wiring import In, Out
 from amaranth.lib.cdc import ResetSynchronizer
 from amaranth_zynq.ps7 import PsZynq
 
@@ -11,8 +9,7 @@ from .csr import Registers
 from .dma import DMAController
 from .dma_inst import DMAInstParser, DMAInstRunner
 from .fifo import Fifos
-from .inst_runner import InstRunner, InstDispatcher
-from .inst_runner import InstRunner, InstConsumer
+from .inst_runner import InstRunner, InstDispatcher, InstConsumer
 from .interface import ControlInterface
 from .io import PulseIO
 

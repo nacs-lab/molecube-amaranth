@@ -2,11 +2,10 @@
 
 from amaranth import *
 from amaranth.lib import wiring
-from amaranth.lib.wiring import In, Out
+from amaranth.lib.wiring import Out
 from amaranth.lib.memory import Memory
 from amaranth.lib.data import View
 
-from amaranth_axi.adaptors import InAdaptor, OutAdaptor
 
 from transactron import TModule, Transaction, Method, def_method
 from transactron.lib import PipelineBuilder
