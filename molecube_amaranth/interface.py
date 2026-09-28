@@ -9,7 +9,7 @@ from transactron.lib import PipelineBuilder
 from types import SimpleNamespace
 
 from .config import MAJOR_VERSION, MINOR_VERSION
-from .fifo import BufferedFifo, pipeline_regfifo
+from .fifo import RegFifo, pipeline_regfifo
 from .utils import xvalue, reg_chain
 
 def relaxed_read_shadow(m, reg):
@@ -198,7 +198,7 @@ class ControlInterface(Elaboratable):
         dma_enabled.attrs["molecube.vivado.false_path_to"] = "TRUE"
 
         # Buffer for command fifo to simplify write combinational logic
-        m.submodules.cmd_pre_fifo = cmd_pre_fifo = BufferedFifo([('data', self.data_width)], 4)
+        m.submodules.cmd_pre_fifo = cmd_pre_fifo = RegFifo([('data', self.data_width)])
         with Transaction().body(m):
             cmd = cmd_pre_fifo.read(m)
             with m.If(dma_enabled):
@@ -463,9 +463,9 @@ class ControlInterface(Elaboratable):
             if batch_id == len(batches) // 2 - 1:
                 pipeline_regfifo(read_pipe)
 
-        m.submodules.read_rep_fifo = read_rep_fifo = BufferedFifo(
+        m.submodules.read_rep_fifo = read_rep_fifo = RegFifo(
             [('data', self.data_width), ('resp', 2), ('id', self.id_width),
-             ('last', 1)], 4)
+             ('last', 1)])
 
         read_pipe.call_method(read_rep_fifo.write)
 
